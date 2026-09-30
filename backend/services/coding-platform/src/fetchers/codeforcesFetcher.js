@@ -10,21 +10,21 @@ async function fetchWithAPI(handle) {
     timeout: 15000,
   });
 
-  if (response.data.status !== 'OK') {
-    throw new Error(`Codeforces API error: ${response.data.comment || 'Unknown'}`);
-  }
+  if (response.data && response.data.status === 'OK') {
+    const submissions = response.data.result || [];
+    const solved = new Set();
 
-  const submissions = response.data.result || [];
-  const solved = new Set();
-
-  for (const sub of submissions) {
-    if (sub.verdict === 'OK') {
-      const key = `${sub.problem.contestId}-${sub.problem.index}`;
-      solved.add(key);
+    for (const sub of submissions) {
+      if (sub.verdict === 'OK') {
+        const key = `${sub.problem.contestId}-${sub.problem.index}`;
+        solved.add(key);
+      }
     }
+
+    return solved.size;
   }
 
-  return solved.size;
+  throw new Error(`Codeforces API error: ${response.data?.comment || 'Unknown'}`);
 }
 
 async function fetchWithProfile(handle) {
@@ -72,6 +72,16 @@ async function fetchCodeforces(profileUrl) {
   let totalSolved = 0;
 
   try {
+    totalSolved = await fetchWithAPI(handle);
+    if (totalSolved >= 0) {
+      logger.info(`Codeforces ${handle}: total=${totalSolved} (API), sql=0`);
+      return { totalProblemsSolved: totalSolved, sqlProblemsSolved: 0 };
+    }
+  } catch (apiErr) {
+    logger.warn(`Codeforces API failed for ${handle}: ${apiErr.message}`);
+  }
+
+  try {
     totalSolved = await fetchWithProfile(handle);
     if (totalSolved > 0) {
       logger.info(`Codeforces ${handle}: total=${totalSolved} (profile), sql=0`);
@@ -81,9 +91,7 @@ async function fetchCodeforces(profileUrl) {
     logger.warn(`Codeforces profile scrape failed for ${handle}: ${err.message}`);
   }
 
-  totalSolved = await fetchWithAPI(handle);
-
-  logger.info(`Codeforces ${handle}: total=${totalSolved} (API), sql=0`);
+  logger.info(`Codeforces ${handle}: total=${totalSolved}, sql=0`);
   return { totalProblemsSolved: totalSolved, sqlProblemsSolved: 0 };
 }
 

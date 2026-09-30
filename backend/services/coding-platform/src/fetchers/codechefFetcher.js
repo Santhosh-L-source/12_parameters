@@ -1,74 +1,46 @@
 const axios = require('../utils/axiosAdapter');
-const cheerio = require('../utils/cheerioAdapter');
 const config = require('../config/config');
-const { withPage } = require('./browserPool');
 const logger = require('../utils/logger');
 
-async function fetchWithCheerio(handle) {
-  const url = `https://www.codechef.com/users/${handle}`;
-  const response = await axios.get(url, {
-    headers: { 'User-Agent': config.userAgent },
-    timeout: 15000,
-    maxRedirects: 0,
-    validateStatus: (s) => s >= 200 && s < 400,
-  });
-
-  if (response.status >= 300) {
-    throw new Error(`CodeChef user not found: ${handle}`);
-  }
-
-  const $ = cheerio.load(response.data);
-
+function parseCodeChefHtml(html) {
   let totalSolved = 0;
 
-  // Look for "Total Problems Solved: N" in any h3
-  $('h3').each((_, el) => {
-    const text = $(el).text().trim();
-    const match = text.match(/Total Problems Solved[:\s]*(\d+)/i);
-    if (match) totalSolved = parseInt(match[1], 10);
-  });
+  // Pattern 1: "Total Problems Solved: 90" or "Total Problems Solved : 90"
+  const m1 = html.match(/Total\s+Problems\s+Solved[:\s]*(\d+)/i);
+  if (m1) {
+    totalSolved = parseInt(m1[1], 10);
+  }
 
-  // Fallback: last h3 in problems-solved section
+  // Pattern 2: problems-solved section
   if (totalSolved === 0) {
-    const problemsSection = $('.rating-data-section.problems-solved');
-    if (problemsSection.length) {
-      const h3s = problemsSection.find('h3');
-      const lastH3 = h3s.last().text().trim();
-      const match = lastH3.match(/(\d+)/);
-      if (match) totalSolved = parseInt(match[0], 10);
+    const m2 = html.match(/problems-solved[\s\S]*?<h3>\s*(\d+)/i);
+    if (m2) {
+      totalSolved = parseInt(m2[1], 10);
+    }
+  }
+
+  // Pattern 3: Fully Solved (90)
+  if (totalSolved === 0) {
+    const m3 = html.match(/Fully\s+Solved\s*\(\s*(\d+)\s*\)/i);
+    if (m3) {
+      totalSolved = parseInt(m3[1], 10);
+    }
+  }
+
+  // Pattern 4: Any h3 containing solved count
+  if (totalSolved === 0) {
+    const h3Matches = html.matchAll(/<h3[^>]*>([\s\S]*?)<\/h3>/gi);
+    for (const match of h3Matches) {
+      const text = match[1].replace(/<[^>]+>/g, ' ').trim();
+      const m = text.match(/Total\s+Problems\s+Solved[:\s]*(\d+)/i) || text.match(/(\d+)/);
+      if (m && text.toLowerCase().includes('solved')) {
+        const val = parseInt(m[1], 10);
+        if (val > totalSolved) totalSolved = val;
+      }
     }
   }
 
   return totalSolved;
-}
-
-async function fetchWithPuppeteer(handle) {
-  return withPage(async (page) => {
-    await page.goto(`https://www.codechef.com/users/${handle}`, {
-      waitUntil: 'networkidle2',
-    });
-
-    const stats = await page.evaluate(() => {
-      let total = 0;
-
-      // Look for "Total Problems Solved: N" in any h3
-      document.querySelectorAll('h3').forEach((el) => {
-        const match = el.textContent.match(/Total Problems Solved[:\s]*(\d+)/i);
-        if (match) total = parseInt(match[1], 10);
-      });
-
-      // Fallback: text scan
-      if (total === 0) {
-        const text = document.body.innerText;
-        const match = text.match(/Total Problems Solved[:\s]*(\d+)/i);
-        if (match) total = parseInt(match[1], 10);
-      }
-
-      return { totalSolved: total };
-    });
-
-    return stats.totalSolved;
-  });
 }
 
 async function fetchCodeChef(profileUrl) {
@@ -80,15 +52,27 @@ async function fetchCodeChef(profileUrl) {
   let totalSolved = 0;
 
   try {
-    totalSolved = await fetchWithCheerio(handle);
+    const url = `https://www.codechef.com/users/${encodeURIComponent(handle)}`;
+    const response = await axios.get(url, {
+      headers: { 'User-Agent': config.userAgent },
+      timeout: 15000,
+      maxRedirects: 5,
+      validateStatus: (s) => s >= 200 && s < 400,
+    });
+
+    if (response.status >= 400) {
+      throw new Error(`CodeChef user not found: ${handle}`);
+    }
+
+    const html = typeof response.data === 'string' ? response.data : JSON.stringify(response.data || '');
+    totalSolved = parseCodeChefHtml(html);
   } catch (err) {
-    if (err.message.includes('not found')) throw err;
-    logger.info(`CodeChef Cheerio failed for ${handle}, falling back to Puppeteer: ${err.message}`);
-    totalSolved = await fetchWithPuppeteer(handle);
+    if (err.message && err.message.includes('not found')) throw err;
+    logger.warn(`CodeChef scrape failed for ${handle}: ${err.message}`);
   }
 
   logger.info(`CodeChef ${handle}: total=${totalSolved}, sql=0 (no SQL on platform)`);
   return { totalProblemsSolved: totalSolved, sqlProblemsSolved: 0 };
 }
 
-module.exports = { fetchCodeChef };
+module.exports = { fetchCodeChef, parseCodeChefHtml };
