@@ -1,4 +1,4 @@
-const axios = require('axios');
+const axios = require('../utils/axiosAdapter');
 const config = require('./config');
 const logger = require('../utils/logger');
 
@@ -106,7 +106,7 @@ const VERIFICATION_STRATEGIES = {
       '(You can restore your real affiliation after verification)',
     ],
     check: async (handle, expectedToken) => {
-      const cheerio = require('cheerio');
+      const cheerio = require('../utils/cheerioAdapter');
       const res = await axios.get(
         `https://atcoder.jp/users/${encodeURIComponent(handle)}`,
         { headers: { 'User-Agent': config.userAgent }, timeout: 15000 }

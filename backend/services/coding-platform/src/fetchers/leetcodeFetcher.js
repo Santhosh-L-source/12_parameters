@@ -1,4 +1,4 @@
-const axios = require('axios');
+const axios = require('../utils/axiosAdapter');
 const config = require('../config/config');
 const logger = require('../utils/logger');
 

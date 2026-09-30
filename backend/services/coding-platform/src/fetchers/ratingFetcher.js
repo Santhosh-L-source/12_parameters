@@ -1,4 +1,4 @@
-const axios = require('axios');
+const axios = require('../utils/axiosAdapter');
 const logger = require('../utils/logger');
 const config = require('../config/config');
 
@@ -77,7 +77,7 @@ async function fetchCodeforcesRating(profileUrlOrHandle) {
   }
 }
 
-const cheerio = require('cheerio');
+const cheerio = require('../utils/cheerioAdapter');
 
 /**
  * Fetch rating from CodeChef

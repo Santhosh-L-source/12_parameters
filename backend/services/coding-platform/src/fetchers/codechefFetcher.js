@@ -1,5 +1,5 @@
-const axios = require('axios');
-const cheerio = require('cheerio');
+const axios = require('../utils/axiosAdapter');
+const cheerio = require('../utils/cheerioAdapter');
 const config = require('../config/config');
 const { withPage } = require('./browserPool');
 const logger = require('../utils/logger');

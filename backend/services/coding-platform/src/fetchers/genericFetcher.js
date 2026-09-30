@@ -1,4 +1,4 @@
-const axios = require('axios');
+const axios = require('../utils/axiosAdapter');
 const { withPage } = require('./browserPool');
 const logger = require('../utils/logger');
 

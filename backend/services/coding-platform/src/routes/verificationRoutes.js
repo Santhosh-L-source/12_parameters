@@ -367,8 +367,8 @@ router.post(
 
 // Helper: fetch profile field and check for verification token
 async function checkProfileForToken(platform, username, profileUrl, rollNumber, storedTokenHash) {
-  const axios = require('axios');
-  const cheerio = require('cheerio');
+  const axios = require('../utils/axiosAdapter');
+  const cheerio = require('../utils/cheerioAdapter');
   const { withPage } = require('../fetchers/browserPool');
   const prefix = `VERIFY-${rollNumber}-`;
   let fieldContent = '';
