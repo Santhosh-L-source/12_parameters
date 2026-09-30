@@ -51,6 +51,10 @@ app.use('/api/student', studentRoutes);
 app.use('/api/mentor', mentorRoutes);
 app.use('/api/anomaly', anomalyRoutes);
 
+app.get('/', (req, res) => {
+  res.json({ success: true, status: 'ok', message: 'HOPE 12-Parameters Academic Backend Service' });
+});
+
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', module: 'Project/Publication/Patent', port: process.env.PORT });
 });
