@@ -1,10 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
-import { mentorAPI, adminAPI } from '../services/api';
+import { mentorAPI, adminAPI, API_BASE_URL } from '../services/api';
 import './AdminDashboard.css';
-
-const API_BASE_URL = 'http://localhost:3005';
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
