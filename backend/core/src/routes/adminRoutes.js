@@ -13,10 +13,12 @@ const router = express.Router();
 router.use(authenticate);
 router.use(requireRole('admin'));
 
+const os = require('os');
+
 // Configure multer for file upload
 const upload = multer({
-  dest: 'uploads/',
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  dest: path.join(os.tmpdir(), 'hope_excel_uploads'),
+  limits: { fileSize: 15 * 1024 * 1024 }, // 15MB limit
   fileFilter: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
     if (ext !== '.xlsx' && ext !== '.xls') {

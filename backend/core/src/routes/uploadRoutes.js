@@ -6,10 +6,16 @@ const { authenticate } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Ensure upload directory exists
-const uploadDir = path.join(__dirname, '../../uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
+const os = require('os');
+
+// Ensure upload directory exists (using system temp directory for serverless / local compatibility)
+const uploadDir = path.join(os.tmpdir(), 'hope_uploads');
+try {
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+  }
+} catch (e) {
+  console.warn('Upload dir warning:', e.message);
 }
 
 // Configure multer storage
