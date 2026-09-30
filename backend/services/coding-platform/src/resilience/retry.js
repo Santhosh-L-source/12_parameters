@@ -1,19 +1,19 @@
-const pRetryModule = require('p-retry');
-const pRetry = pRetryModule.default || pRetryModule;
-const config = require('../config/config');
 const logger = require('../utils/logger');
 
-async function withRetry(fn, label = 'operation') {
-  return pRetry(fn, {
-    retries: config.retry.retries,
-    minTimeout: config.retry.minTimeout,
-    factor: 2,
-    onFailedAttempt: (error) => {
+async function withRetry(fn, label = 'operation', retries = 2) {
+  let attempt = 0;
+  while (attempt <= retries) {
+    try {
+      return await fn();
+    } catch (error) {
+      attempt++;
+      if (attempt > retries) throw error;
       logger.warn(
-        `${label} attempt ${error.attemptNumber}/${config.retry.retries + 1} failed: ${error.message}`
+        `${label} attempt ${attempt}/${retries + 1} failed: ${error.message}`
       );
-    },
-  });
+      await new Promise((res) => setTimeout(res, 500 * attempt));
+    }
+  }
 }
 
 module.exports = { withRetry };

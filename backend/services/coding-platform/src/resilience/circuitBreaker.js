@@ -1,5 +1,3 @@
-const CircuitBreaker = require('opossum');
-const config = require('../config/config');
 const logger = require('../utils/logger');
 
 const breakers = new Map();
@@ -7,17 +5,17 @@ const breakers = new Map();
 function createBreaker(name, fn) {
   if (breakers.has(name)) return breakers.get(name);
 
-  const breaker = new CircuitBreaker(fn, {
-    errorThresholdPercentage: config.circuitBreaker.errorThresholdPercentage,
-    resetTimeout: config.circuitBreaker.resetTimeout,
-    timeout: config.circuitBreaker.timeout,
-    name,
-  });
-
-  breaker.on('open', () => logger.warn(`Circuit breaker OPEN: ${name}`));
-  breaker.on('halfOpen', () => logger.info(`Circuit breaker HALF-OPEN: ${name}`));
-  breaker.on('close', () => logger.info(`Circuit breaker CLOSED: ${name}`));
-  breaker.on('fallback', () => logger.warn(`Circuit breaker FALLBACK: ${name}`));
+  const breaker = {
+    fire: async (...args) => {
+      try {
+        return await fn(...args);
+      } catch (err) {
+        logger.warn(`Execution failed for circuit breaker [${name}]: ${err.message}`);
+        throw err;
+      }
+    },
+    on: () => {},
+  };
 
   breakers.set(name, breaker);
   return breaker;
