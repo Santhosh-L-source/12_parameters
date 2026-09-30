@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mentor Panel — Foreign Language Proficiency</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --blue:       #2563eb; --blue-dark: #1d4ed8; --blue-light: #eff4ff; --blue-bg: #dbeafe; --blue-glow: rgba(37,99,235,.12);
+      --border:     #dbe4f8; --border2: #c2d0f5;
+      --green:      #16a34a; --green-bg: #f0fdf4; --green-bdr: #bbf7d0;
+      --red:        #dc2626; --red-bg: #fef2f2; --red-bdr: #fecaca;
+      --yellow:     #d97706; --yellow-bg: #fffbeb; --yellow-bdr: #fde68a;
+      --purple:     #7c3aed; --purple-bg: #f5f3ff; --purple-bdr: #ede9fe;
+      --bg:         #f0f4ff; --white: #ffffff; --surface2: #f5f8ff;
+      --text:       #0f172a; --text2: #334155; --text3: #64748b; --text4: #94a3b8;
+      --radius:     12px; --radius-sm: 8px;
+      --font:       'Inter', system-ui, sans-serif; --mono: 'JetBrains Mono', monospace;
+      --shadow:     0 1px 3px rgba(15,23,42,.07), 0 4px 16px rgba(37,99,235,.05);
+    }
+    html { font-size: 14px; }
+    body { background: var(--bg); color: var(--text); font-family: var(--font); line-height: 1.6; min-height: 100vh; }
+
+    nav { background:var(--white); border-bottom:1px solid var(--border); padding:0 28px; height:58px; display:flex; align-items:center; gap:10px; position:sticky; top:0; z-index:100; box-shadow:0 1px 4px rgba(37,99,235,.06); }
+    .logo { width:32px; height:32px; background:linear-gradient(135deg,var(--blue),#60a5fa); border-radius:8px; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:13px; color:#fff; box-shadow:0 2px 8px rgba(37,99,235,.28); flex-shrink:0; }
+    .nav-title { font-size:14px; font-weight:700; color:var(--text); }
+    .nav-sep   { color:var(--text4); margin:0 2px; }
+    .nav-sub   { font-size:13px; font-weight:500; color:var(--text3); }
+    .nav-right { margin-left:auto; display:flex; align-items:center; gap:8px; }
+    .chip { padding:4px 12px; border-radius:20px; font-size:11px; font-weight:600; letter-spacing:.03em; }
+    .chip-green { background:var(--green-bg); color:var(--green); border:1px solid var(--green-bdr); display:flex; align-items:center; gap:5px; }
+    .chip-green::before { content:''; width:6px; height:6px; border-radius:50%; background:var(--green); animation:pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+    .nav-link { font-size:12px; font-weight:600; color:var(--blue); text-decoration:none; padding:4px 10px; border:1px solid var(--blue-bg); border-radius:6px; background:var(--blue-light); transition:background .15s; }
+    .nav-link:hover { background:var(--blue-bg); }
+
+    .ctrl-bar { background:var(--white); border-bottom:1px solid var(--border); padding:14px 28px; display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap; }
+    .ctrl-field { display:flex; flex-direction:column; gap:5px; }
+    .ctrl-field label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--text3); }
+    .ctrl-field input, .ctrl-field select { height:38px; padding:0 12px; background:var(--surface2); border:1px solid var(--border2); border-radius:var(--radius-sm); color:var(--text); font-family:var(--font); font-size:13px; font-weight:500; outline:none; transition:border-color .15s,box-shadow .15s; appearance:none; }
+    .ctrl-field input { min-width:200px; }
+    .ctrl-field select { min-width:160px; }
+    .ctrl-field input:focus, .ctrl-field select:focus { border-color:var(--blue); box-shadow:0 0 0 3px var(--blue-glow); }
+    .sel-wrap { position:relative; }
+    .sel-wrap::after { content:'▾'; position:absolute; right:10px; top:50%; transform:translateY(-50%); color:var(--text4); pointer-events:none; font-size:11px; }
+    .ctrl-btn { height:38px; padding:0 20px; background:var(--blue); color:#fff; border:none; border-radius:var(--radius-sm); font-family:var(--font); font-size:13px; font-weight:600; cursor:pointer; transition:background .15s; white-space:nowrap; box-shadow:0 2px 8px rgba(37,99,235,.2); }
+    .ctrl-btn:hover { background:var(--blue-dark); }
+
+    .page { padding:24px 28px; max-width:1340px; margin:0 auto; }
+    .page-layout { display:grid; grid-template-columns:1fr 300px; gap:20px; align-items:start; }
+
+    .stats-row { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:20px; }
+    .stat-card { background:var(--white); border:1px solid var(--border); border-radius:var(--radius); padding:18px 20px; box-shadow:var(--shadow); display:flex; flex-direction:column; gap:6px; }
+    .stat-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--text3); }
+    .stat-num   { font-family:var(--mono); font-size:28px; font-weight:700; line-height:1; }
+    .stat-num.blue   { color:var(--blue); } .stat-num.yellow { color:var(--yellow); }
+    .stat-num.green  { color:var(--green); } .stat-num.red { color:var(--red); }
+
+    .tabs { display:flex; gap:2px; margin-bottom:16px; background:var(--white); border:1px solid var(--border); border-radius:var(--radius-sm); padding:4px; width:fit-content; box-shadow:var(--shadow); }
+    .tab { padding:7px 18px; border-radius:6px; font-size:13px; font-weight:600; color:var(--text3); cursor:pointer; border:none; background:transparent; font-family:var(--font); transition:background .15s,color .15s; }
+    .tab:hover { background:var(--surface2); color:var(--text2); }
+    .tab.active { background:var(--blue); color:#fff; box-shadow:0 1px 4px rgba(37,99,235,.25); }
+
+    .card { background:var(--white); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); }
+    .card-hd { padding:14px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+    .card-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--text3); }
+    .card-body  { padding:20px; }
+
+    .table-wrap { overflow-x:auto; }
+    table { width:100%; border-collapse:collapse; font-size:13px; }
+    th { text-align:left; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--text4); padding:10px 14px; border-bottom:1px solid var(--border); background:var(--surface2); white-space:nowrap; }
+    td { padding:10px 14px; border-bottom:1px solid var(--border); vertical-align:top; color:var(--text2); }
+    tr:last-child td { border-bottom:none; }
+    tbody tr { transition:background .1s; }
+    tbody tr:hover td { background:var(--surface2); }
+    .td-reg  { font-family:var(--mono); font-size:12px; font-weight:700; color:var(--text); }
+    .td-sem  { font-size:12px; color:var(--text3); font-family:var(--mono); }
+    .td-lang { font-weight:600; color:var(--text); }
+    .cefr-chip { font-family:var(--mono); font-size:11px; font-weight:700; padding:3px 8px; border-radius:5px; background:var(--blue-bg); color:var(--blue); }
+    .sbadge { display:inline-flex; align-items:center; gap:5px; padding:3px 9px; border-radius:20px; font-size:11px; font-weight:600; }
+    .sbadge::before { content:''; width:5px; height:5px; border-radius:50%; }
+    .sbadge.pending  { background:var(--yellow-bg); color:var(--yellow); border:1px solid var(--yellow-bdr); }
+    .sbadge.pending::before  { background:var(--yellow); animation:pulse 2s infinite; }
+    .sbadge.approved { background:var(--green-bg);  color:var(--green);  border:1px solid var(--green-bdr); }
+    .sbadge.approved::before { background:var(--green); }
+    .sbadge.rejected { background:var(--red-bg);    color:var(--red);    border:1px solid var(--red-bdr); }
+    .sbadge.rejected::before { background:var(--red); }
+    .verified-info { font-size:11px; color:var(--text4); font-family:var(--mono); margin-top:4px; }
+    .jlpt-block { margin-top:5px; display:flex; flex-direction:column; gap:3px; }
+    .jlpt-tag  { display:inline-flex; align-items:center; gap:4px; font-family:var(--mono); font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; background:var(--purple-bg); color:var(--purple); border:1px solid var(--purple-bdr); }
+    .jlpt-score-alert { font-size:11px; color:var(--blue); background:var(--blue-light); border:1px solid var(--blue-bg); border-radius:5px; padding:4px 8px; margin-top:4px; }
+
+    .action-col { min-width:200px; }
+    .action-pair { display:flex; gap:6px; }
+    .btn-approve, .btn-reject { padding:6px 14px; border-radius:6px; font-family:var(--font); font-size:12px; font-weight:600; cursor:pointer; transition:background .15s,box-shadow .15s; border:none; }
+    .btn-approve { background:var(--green); color:#fff; box-shadow:0 1px 4px rgba(22,163,74,.2); }
+    .btn-approve:hover { background:#15803d; }
+    .btn-reject  { background:var(--red-bg); color:var(--red); border:1px solid var(--red-bdr); }
+    .btn-reject:hover  { background:#fee2e2; }
+    .reject-form { display:none; margin-top:8px; }
+    .reject-form.open { display:block; }
+    .reject-form textarea { width:100%; padding:8px 10px; background:var(--white); border:1px solid var(--red-bdr); border-radius:6px; color:var(--text); font-family:var(--font); font-size:12px; resize:vertical; min-height:56px; outline:none; transition:border-color .15s; }
+    .reject-form textarea:focus { border-color:var(--red); box-shadow:0 0 0 3px rgba(220,38,38,.1); }
+    .reject-confirm-row { display:flex; gap:6px; margin-top:6px; }
+    .btn-confirm-reject { padding:5px 12px; background:var(--red); color:#fff; border:none; border-radius:5px; font-family:var(--font); font-size:11px; font-weight:600; cursor:pointer; }
+    .btn-confirm-reject:hover { background:#b91c1c; }
+    .btn-cancel { padding:5px 12px; background:var(--surface2); color:var(--text3); border:1px solid var(--border2); border-radius:5px; font-family:var(--font); font-size:11px; font-weight:600; cursor:pointer; }
+
+    .empty { padding:52px 20px; text-align:center; }
+    .empty-icon { width:52px; height:52px; background:var(--blue-light); border:1px solid var(--blue-bg); border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:24px; margin:0 auto 14px; }
+    .empty-title { font-size:14px; font-weight:700; color:var(--text); margin-bottom:4px; }
+    .empty-sub   { font-size:12px; color:var(--text4); }
+    .err-banner { display:none; margin-bottom:16px; padding:12px 16px; background:var(--red-bg); border:1px solid var(--red-bdr); border-radius:var(--radius-sm); font-size:13px; color:var(--red); font-weight:500; }
+    .err-banner.show { display:block; }
+    .global-toast { position:fixed; bottom:24px; right:24px; z-index:9999; padding:12px 18px; border-radius:var(--radius-sm); font-size:13px; font-weight:500; opacity:0; transform:translateY(8px); transition:opacity .2s,transform .2s; pointer-events:none; max-width:360px; }
+    .global-toast.show { opacity:1; transform:none; pointer-events:auto; }
+    .global-toast.ok  { background:var(--green-bg); border:1px solid var(--green-bdr); color:var(--green); box-shadow:0 4px 16px rgba(22,163,74,.15); }
+    .global-toast.err { background:var(--red-bg);   border:1px solid var(--red-bdr);   color:var(--red);   box-shadow:0 4px 16px rgba(220,38,38,.15); }
+
+    /* Verification guide sidebar */
+    .vguide { display:flex; flex-direction:column; gap:16px; }
+    .vguide-card { background:var(--white); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); }
+    .vguide-hd { padding:12px 16px; border-bottom:1px solid var(--border); font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--text3); }
+    .vguide-body { padding:14px 16px; }
+    .vguide-step { display:flex; gap:10px; margin-bottom:10px; }
+    .vguide-step:last-child { margin-bottom:0; }
+    .vs-num { width:20px; height:20px; border-radius:50%; background:var(--blue); color:#fff; font-size:10px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:1px; }
+    .vs-text { font-size:12px; color:var(--text2); line-height:1.5; }
+    .vs-text strong { color:var(--text); }
+
+    .jlpt-ref-mini { width:100%; border-collapse:collapse; font-size:11px; margin-top:10px; }
+    .jlpt-ref-mini th { background:var(--surface2); padding:5px 8px; text-align:left; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--text4); border-bottom:1px solid var(--border); }
+    .jlpt-ref-mini td { padding:5px 8px; border-bottom:1px solid var(--border); color:var(--text2); font-family:var(--mono); }
+    .jlpt-ref-mini tr:last-child td { border-bottom:none; }
+    .reject-list { list-style:none; display:flex; flex-direction:column; gap:5px; }
+    .reject-list li { font-size:12px; color:var(--text2); padding-left:14px; position:relative; line-height:1.4; }
+    .reject-list li::before { content:'✗'; position:absolute; left:0; color:var(--red); font-size:10px; top:2px; }
+  </style>
+</head>
+<body>
+
+<div id="globalToast" class="global-toast"></div>
+
+<nav>
+  <div class="logo">FL</div>
+  <span class="nav-title">Placement Platform</span>
+  <span class="nav-sep">/</span>
+  <span class="nav-sub">Mentor Panel</span>
+  <div class="nav-right">
+    <span class="chip chip-green">Mentor / Placement Center</span>
+    <a class="nav-link" href="student.html">Student Portal →</a>
+    <a class="nav-link" href="index.html">← Home</a>
+  </div>
+</nav>
+
+<div class="ctrl-bar">
+  <div class="ctrl-field">
+    <label>Mentor Name / ID</label>
+    <input id="mentorId" placeholder="Enter your name or ID" oninput="saveMentor()" />
+  </div>
+  <div class="ctrl-field">
+    <label>Semester Filter</label>
+    <div class="sel-wrap">
+      <select id="semFilter" onchange="loadAll()"></select>
+    </div>
+  </div>
+  <button class="ctrl-btn" onclick="loadAll()">Refresh</button>
+</div>
+
+<div class="page">
+  <div id="errBanner" class="err-banner"></div>
+
+  <div class="stats-row">
+    <div class="stat-card"><div class="stat-label">Total</div><div class="stat-num blue" id="statTotal">—</div></div>
+    <div class="stat-card"><div class="stat-label">Pending</div><div class="stat-num yellow" id="statPending">—</div></div>
+    <div class="stat-card"><div class="stat-label">Approved</div><div class="stat-num green" id="statApproved">—</div></div>
+    <div class="stat-card"><div class="stat-label">Rejected</div><div class="stat-num red" id="statRejected">—</div></div>
+  </div>
+
+  <div class="page-layout">
+    <div>
+      <div class="tabs">
+        <button class="tab active" data-status="ALL"      onclick="setTab(this)">All</button>
+        <button class="tab"        data-status="PENDING"  onclick="setTab(this)">Pending</button>
+        <button class="tab"        data-status="APPROVED" onclick="setTab(this)">Approved</button>
+        <button class="tab"        data-status="REJECTED" onclick="setTab(this)">Rejected</button>
+      </div>
+
+      <div class="card">
+        <div class="card-hd">
+          <span class="card-title">Submissions</span>
+          <span id="rowCount" style="font-size:11px;color:var(--text4);font-weight:600;"></span>
+        </div>
+        <div id="submissionsTable">
+          <div class="empty">
+            <div class="empty-icon">📥</div>
+            <div class="empty-title">Loading submissions…</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Verification guide sidebar -->
+    <div class="vguide">
+
+      <div class="vguide-card">
+        <div class="vguide-hd">Verification Checklist</div>
+        <div class="vguide-body">
+          <div class="vguide-step"><div class="vs-num">1</div><div class="vs-text">Verify <strong>student identity</strong> matches the certificate.</div></div>
+          <div class="vguide-step"><div class="vs-num">2</div><div class="vs-text">Confirm the <strong>issuing organisation</strong> is an approved body (JLPT, Goethe, DELF, DELE/SIELE).</div></div>
+          <div class="vguide-step"><div class="vs-num">3</div><div class="vs-text">Check the <strong>certificate number</strong> or reference code.</div></div>
+          <div class="vguide-step"><div class="vs-num">4</div><div class="vs-text">Confirm the <strong>result date</strong> is valid and not expired.</div></div>
+          <div class="vguide-step"><div class="vs-num">5</div><div class="vs-text">Map the result to the correct <strong>CEFR level</strong> (see JLPT table below for score-based mapping).</div></div>
+          <div class="vguide-step"><div class="vs-num">6</div><div class="vs-text">Award is based on <strong>highest verified level in ONE non-English language</strong> only.</div></div>
+        </div>
+      </div>
+
+      <div class="vguide-card">
+        <div class="vguide-hd">JLPT Score → CEFR</div>
+        <div class="vguide-body">
+          <div style="font-size:11px;color:var(--text4);margin-bottom:8px;">Certs dated Dec 2025+ show CEFR directly. For older certs, use this table + Central Language Equivalence List.</div>
+          <table class="jlpt-ref-mini">
+            <thead><tr><th>Level</th><th>Score</th><th>CEFR</th></tr></thead>
+            <tbody>
+              <tr><td>N5</td><td>any pass</td><td>A1</td></tr>
+              <tr><td>N4</td><td>any pass</td><td>A2</td></tr>
+              <tr><td>N3</td><td>95 – 103</td><td>A2</td></tr>
+              <tr><td>N3</td><td>104+</td><td>B1</td></tr>
+              <tr><td>N2</td><td>90 – 111</td><td>B1</td></tr>
+              <tr><td>N2</td><td>112+</td><td>B2</td></tr>
+              <tr><td>N1</td><td>100 – 141</td><td>B2</td></tr>
+              <tr><td>N1</td><td>142+</td><td>C1</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="vguide-card">
+        <div class="vguide-hd">Not Accepted</div>
+        <div class="vguide-body">
+          <ul class="reject-list">
+            <li>IELTS / TOEFL / PTE / Cambridge English</li>
+            <li>Course attendance without exam</li>
+            <li>Self-declared ability</li>
+            <li>Internal department test results</li>
+            <li>Unverifiable or duplicate certificates</li>
+          </ul>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+  const cefrToMarks = l => ({A1:7,A2:12,B1:15,B2:15,C1:15,C2:15}[l] ?? 0);
+  let allRows = [], activeStatus = 'ALL';
+
+  (function buildSems() {
+    const sel = document.getElementById('semFilter');
+    const yr = new Date().getFullYear(), isOdd = new Date().getMonth() >= 6;
+    const cur = `${yr}-${isOdd ? 'Odd' : 'Even'}`;
+    const allOpt = document.createElement('option');
+    allOpt.value = ''; allOpt.textContent = 'All Semesters'; sel.appendChild(allOpt);
+    for (let y = yr - 2; y <= yr + 1; y++) {
+      ['Odd','Even'].forEach(h => {
+        const v = `${y}-${h}`, opt = document.createElement('option');
+        opt.value = v; opt.textContent = v;
+        if (v === cur) opt.selected = true;
+        sel.appendChild(opt);
+      });
+    }
+  })();
+
+  const savedMentor = localStorage.getItem('fl_mentor_id');
+  if (savedMentor) document.getElementById('mentorId').value = savedMentor;
+  function saveMentor() { localStorage.setItem('fl_mentor_id', document.getElementById('mentorId').value.trim()); }
+
+  async function loadAll() {
+    const sem = document.getElementById('semFilter').value;
+    const url = `/api/evidence/language/all?${sem ? 'semester=' + encodeURIComponent(sem) : ''}`;
+    hideErr();
+    try {
+      const res = await fetch(url);
+      if (!res.ok) { const j = await res.json(); showErr(j.error || 'Failed to load.'); return; }
+      const { data } = await res.json();
+      allRows = data;
+      updateStats(data);
+      renderTable(filterRows(data));
+    } catch {
+      showErr('Unable to connect to the server. Ensure the server is running with valid database credentials.');
+    }
+  }
+
+  function filterRows(rows) { return activeStatus === 'ALL' ? rows : rows.filter(r => r.status === activeStatus); }
+
+  function updateStats(rows) {
+    document.getElementById('statTotal').textContent    = rows.length;
+    document.getElementById('statPending').textContent  = rows.filter(r => r.status === 'PENDING').length;
+    document.getElementById('statApproved').textContent = rows.filter(r => r.status === 'APPROVED').length;
+    document.getElementById('statRejected').textContent = rows.filter(r => r.status === 'REJECTED').length;
+  }
+
+  function setTab(el) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    activeStatus = el.dataset.status;
+    renderTable(filterRows(allRows));
+  }
+
+  function renderTable(rows) {
+    document.getElementById('rowCount').textContent = rows.length ? `${rows.length} record${rows.length > 1 ? 's' : ''}` : '';
+
+    if (!rows.length) {
+      document.getElementById('submissionsTable').innerHTML = `
+        <div class="empty"><div class="empty-icon">📭</div>
+          <div class="empty-title">No records found</div>
+          <div class="empty-sub">${activeStatus === 'PENDING' ? 'All submissions have been reviewed.' : 'No submissions match the current filter.'}</div></div>`;
+      return;
+    }
+
+    const tbody = rows.map(r => {
+      const marks = r.status === 'APPROVED' ? cefrToMarks(r.cefr_level) : null;
+      const proofLink = r.proof_url
+        ? `<a href="${r.proof_url}" target="_blank" style="color:var(--blue);font-size:12px;">View →</a>`
+        : '<span style="color:var(--text4)">—</span>';
+
+      // JLPT detail block
+      let jlptHtml = '';
+      if (r.jlpt_level) {
+        const certDate = r.cert_date ? new Date(r.cert_date) : null;
+        const isNewCert = certDate && certDate >= new Date('2025-12-01');
+        jlptHtml = `<div class="jlpt-block">
+          <span class="jlpt-tag">JLPT ${r.jlpt_level}${r.jlpt_score ? ' · Score: ' + r.jlpt_score : ''}</span>
+          ${r.cert_date ? `<span style="font-size:10px;color:var(--text4);font-family:var(--mono);">Cert: ${fmtDate(r.cert_date)}</span>` : ''}
+          ${isNewCert ? '<span class="jlpt-score-alert">New cert — CEFR shown directly on document</span>' : (r.jlpt_score ? '<span class="jlpt-score-alert">Verify score against Central Equivalence List</span>' : '')}
+        </div>`;
+      }
+
+      let actionHtml = '';
+      if (r.status === 'PENDING') {
+        actionHtml = `
+          <div class="action-pair">
+            <button class="btn-approve" onclick="approve('${r.id}')">Approve</button>
+            <button class="btn-reject"  onclick="openReject('${r.id}')">Reject</button>
+          </div>
+          <div class="reject-form" id="rf-${r.id}">
+            <textarea id="rn-${r.id}" placeholder="Reason for rejection (optional)"></textarea>
+            <div class="reject-confirm-row">
+              <button class="btn-confirm-reject" onclick="confirmReject('${r.id}')">Confirm Reject</button>
+              <button class="btn-cancel" onclick="closeReject('${r.id}')">Cancel</button>
+            </div>
+          </div>`;
+      } else {
+        actionHtml = `<div class="verified-info">${fmtDate(r.verified_at)}<br>${r.mentor_id || ''}</div>`;
+      }
+
+      return `<tr id="row-${r.id}">
+        <td class="td-reg">${r.register_number}</td>
+        <td class="td-sem">${r.semester}</td>
+        <td class="td-lang">${r.language_name}</td>
+        <td><span class="cefr-chip">${r.cefr_level}</span></td>
+        <td>${r.certifying_body || '<span style="color:var(--text4)">—</span>'}${jlptHtml}</td>
+        <td>${proofLink}</td>
+        <td><span class="sbadge ${r.status.toLowerCase()}">${r.status}</span></td>
+        <td style="font-family:var(--mono);font-size:11px;color:var(--text4);">${fmtDate(r.submitted_at)}</td>
+        <td>${marks !== null ? `<span style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--blue);">${marks}</span>` : '<span style="color:var(--text4)">—</span>'}</td>
+        <td class="action-col">${actionHtml}</td>
+      </tr>`;
+    }).join('');
+
+    document.getElementById('submissionsTable').innerHTML = `
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Register No.</th><th>Semester</th><th>Language</th><th>CEFR</th>
+            <th>Exam / JLPT</th><th>Proof</th><th>Status</th><th>Submitted</th><th>Marks</th><th>Action</th>
+          </tr></thead>
+          <tbody>${tbody}</tbody>
+        </table>
+      </div>`;
+  }
+
+  async function approve(id) {
+    const mentorId = document.getElementById('mentorId').value.trim();
+    if (!mentorId) { showToast('Enter your Mentor Name / ID above before approving.', false); return; }
+    await verify(id, 'APPROVED', mentorId);
+  }
+  function openReject(id)  { document.getElementById(`rf-${id}`)?.classList.add('open'); }
+  function closeReject(id) { document.getElementById(`rf-${id}`)?.classList.remove('open'); const ta=document.getElementById(`rn-${id}`); if(ta) ta.value=''; }
+  async function confirmReject(id) {
+    const mentorId = document.getElementById('mentorId').value.trim();
+    if (!mentorId) { showToast('Enter your Mentor Name / ID before rejecting.', false); return; }
+    await verify(id, 'REJECTED', mentorId);
+  }
+
+  async function verify(id, status, mentorId) {
+    try {
+      const res = await fetch(`/api/evidence/language/${id}/verify`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status, mentor_id: mentorId }),
+      });
+      const json = await res.json();
+      if (!res.ok) { showToast(json.error || 'Action failed.', false); return; }
+      showToast(
+        status === 'APPROVED' ? `Approved — score updated to ${json.score} pts.` : 'Rejected.',
+        status === 'APPROVED'
+      );
+      await loadAll();
+    } catch { showToast('Server error. Check your connection.', false); }
+  }
+
+  function fmtDate(iso) {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' });
+  }
+  function showErr(msg) { const e=document.getElementById('errBanner'); e.textContent=msg; e.classList.add('show'); }
+  function hideErr() { document.getElementById('errBanner').classList.remove('show'); }
+  let _tt;
+  function showToast(msg, ok) {
+    const el=document.getElementById('globalToast');
+    el.textContent=msg; el.className=`global-toast show ${ok?'ok':'err'}`;
+    clearTimeout(_tt); _tt=setTimeout(()=>{ el.className='global-toast'; },5000);
+  }
+
+  loadAll();
+</script>
+</body>
+</html>

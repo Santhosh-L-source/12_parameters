@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>My Submissions — CertVerify</title>
+  <link rel="stylesheet" href="/static/style.css"/>
+</head>
+<body>
+<nav class="navbar">
+  <a href="/" class="nav-brand">CertVerify</a>
+  <a href="/" class="btn-nav">Submit Certificate</a>
+</nav>
+<div class="page-wrap">
+  <div class="page-header">
+    <h1>My Submissions</h1>
+    <p>Track the status of all your certificate submissions</p>
+  </div>
+
+  <div class="form-card" style="max-width:420px">
+    <form method="POST">
+      <div class="field">
+        <label>Your Roll Number</label>
+        <input type="text" name="roll_number" value="<%= roll || '' %>" placeholder="e.g. 22CS001" required/>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn-primary">View My Submissions</button>
+      </div>
+    </form>
+  </div>
+
+  <% if (roll && (!subs || !subs.length)) { %>
+    <div class="empty-state"><p>No submissions found for roll number <strong><%= roll %></strong>.</p></div>
+  <% } %>
+
+  <% if (subs && subs.length) { %>
+  <div class="table-wrap" style="margin-top:1.5rem">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Certificate</th>
+          <th>Marks</th>
+          <th>Auto Status</th>
+          <th>Mentor Decision</th>
+          <th>Submitted</th>
+          <th>Report</th>
+        </tr>
+      </thead>
+      <tbody>
+      <% subs.forEach(function(sub, idx) { %>
+      <tr>
+        <td><%= idx + 1 %></td>
+        <td><%= sub.matched_cert || sub.cert_filename %></td>
+        <td class="center">
+          <% if (sub.marks_awarded) { %>
+            <span class="marks-pill"><%= sub.marks_awarded %></span>
+          <% } else { %>—<% } %>
+        </td>
+        <td>
+          <% if (sub.final_status === 'ELIGIBLE') { %>
+            <span class="badge pass">ELIGIBLE</span>
+          <% } else if ((sub.final_status || '').includes('MENTOR')) { %>
+            <span class="badge warn">NEEDS REVIEW</span>
+          <% } else { %>
+            <span class="badge fail">NOT ELIGIBLE</span>
+          <% } %>
+        </td>
+        <td>
+          <% if (sub.mentor_decision === 'APPROVED') { %><span class="badge pass">APPROVED</span>
+          <% } else if (sub.mentor_decision === 'REJECTED') { %><span class="badge fail">REJECTED</span>
+          <% } else if (sub.mentor_decision === 'PENDING') { %><span class="badge warn">PENDING</span>
+          <% } else { %><span class="badge neutral">N/A</span><% } %>
+        </td>
+        <td><%= (sub.submitted_at || '').slice(0, 16) %></td>
+        <td><a href="/status/<%= sub.id %>" class="btn-small">View</a></td>
+      </tr>
+      <% }); %>
+      </tbody>
+    </table>
+  </div>
+  <% } %>
+</div>
+</body>
+</html>

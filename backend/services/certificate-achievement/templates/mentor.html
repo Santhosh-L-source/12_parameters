@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Mentor Dashboard — CertVerify</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"/>
+</head>
+<body>
+<nav class="navbar">
+  <a href="{{ url_for('index') }}" class="nav-brand">CertVerify</a>
+  <span class="nav-tag">Mentor Dashboard</span>
+  <a href="{{ url_for('mentor_logout') }}" class="btn-nav">Logout</a>
+</nav>
+
+<div class="page-wrap wide">
+  <div class="page-header">
+    <h1>Mentor Dashboard</h1>
+    <p>Review and approve/reject student certificate submissions</p>
+  </div>
+
+  {% with messages = get_flashed_messages() %}
+  {% if messages %}<div class="flash-ok">{{ messages[0] }}</div>{% endif %}
+  {% endwith %}
+
+  <!-- Stats -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-num">{{ stats.total }}</div>
+      <div class="stat-label">Total</div>
+    </div>
+    <div class="stat-card warn">
+      <div class="stat-num">{{ stats.pending }}</div>
+      <div class="stat-label">Pending Review</div>
+    </div>
+    <div class="stat-card pass">
+      <div class="stat-num">{{ stats.eligible }}</div>
+      <div class="stat-label">Auto-Eligible</div>
+    </div>
+    <div class="stat-card pass">
+      <div class="stat-num">{{ stats.approved }}</div>
+      <div class="stat-label">Approved</div>
+    </div>
+    <div class="stat-card fail">
+      <div class="stat-num">{{ stats.rejected }}</div>
+      <div class="stat-label">Rejected</div>
+    </div>
+  </div>
+
+  <!-- Filter tabs -->
+  <div class="filter-tabs">
+    {% for key, label in [('all','All'),('pending','Pending'),('eligible','Auto-Eligible'),('approved','Approved'),('rejected','Rejected')] %}
+    <a href="{{ url_for('mentor_dashboard', filter=key) }}"
+       class="ftab {% if filter_by == key %}active{% endif %}">{{ label }}</a>
+    {% endfor %}
+  </div>
+
+  <!-- Table -->
+  {% if subs %}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Student Name</th>
+          <th>Roll No.</th>
+          <th>Sem</th>
+          <th>Dept</th>
+          <th>Certificate</th>
+          <th>Marks</th>
+          <th>Auto Status</th>
+          <th>Mentor Decision</th>
+          <th>Submitted</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for sub in subs %}
+      <tr>
+        <td class="idx">{{ loop.index }}</td>
+        <td><strong>{{ sub.student_name }}</strong></td>
+        <td>{{ sub.roll_number }}</td>
+        <td>{{ sub.semester }}</td>
+        <td class="dept-cell">{{ sub.department }}</td>
+        <td class="cert-cell">{{ sub.matched_cert or '—' }}</td>
+        <td class="center">
+          {% if sub.marks_awarded %}
+            <span class="marks-pill">{{ sub.marks_awarded }}</span>
+          {% else %}—{% endif %}
+        </td>
+        <td>
+          {% if sub.final_status == 'ELIGIBLE' %}
+            <span class="badge pass">ELIGIBLE</span>
+          {% elif 'MENTOR' in sub.final_status %}
+            <span class="badge warn">NEEDS REVIEW</span>
+          {% else %}
+            <span class="badge fail">NOT ELIGIBLE</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if sub.mentor_decision == 'APPROVED' %}
+            <span class="badge pass">APPROVED</span>
+          {% elif sub.mentor_decision == 'REJECTED' %}
+            <span class="badge fail">REJECTED</span>
+          {% elif sub.mentor_decision == 'PENDING' %}
+            <span class="badge warn">PENDING</span>
+          {% else %}
+            <span class="badge neutral">N/A</span>
+          {% endif %}
+        </td>
+        <td class="date-cell">{{ sub.submitted_at[:16] }}</td>
+        <td style="white-space:nowrap">
+          <a href="{{ url_for('mentor_submission', sub_id=sub.id) }}"
+             class="btn-small">Review</a>
+          <a href="{{ url_for('mentor_view_file', sub_id=sub.id) }}"
+             target="_blank" class="btn-small btn-small-file"
+             title="View Certificate">📄</a>
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <p>No submissions found for this filter.</p>
+  </div>
+  {% endif %}
+</div>
+</body>
+</html>

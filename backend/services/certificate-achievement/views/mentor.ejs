@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Mentor Dashboard — CertVerify</title>
+  <link rel="stylesheet" href="/static/style.css"/>
+</head>
+<body>
+<nav class="navbar">
+  <a href="/" class="nav-brand">CertVerify</a>
+  <span class="nav-tag">Mentor Dashboard</span>
+  <a href="/mentor/logout" class="btn-nav">Logout</a>
+</nav>
+
+<div class="page-wrap wide">
+  <div class="page-header">
+    <h1>Mentor Dashboard</h1>
+    <p>Review and approve/reject student certificate submissions</p>
+  </div>
+
+  <% if (locals.flash_ok) { %>
+    <div class="flash-ok"><%= flash_ok %></div>
+  <% } %>
+
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-num"><%= stats.total %></div>
+      <div class="stat-label">Total</div>
+    </div>
+    <div class="stat-card warn">
+      <div class="stat-num"><%= stats.pending %></div>
+      <div class="stat-label">Pending Review</div>
+    </div>
+    <div class="stat-card pass">
+      <div class="stat-num"><%= stats.eligible %></div>
+      <div class="stat-label">Auto-Eligible</div>
+    </div>
+    <div class="stat-card pass">
+      <div class="stat-num"><%= stats.approved %></div>
+      <div class="stat-label">Approved</div>
+    </div>
+    <div class="stat-card fail">
+      <div class="stat-num"><%= stats.rejected %></div>
+      <div class="stat-label">Rejected</div>
+    </div>
+  </div>
+
+  <div class="filter-tabs">
+    <% var filters = [['all','All'],['pending','Pending'],['eligible','Auto-Eligible'],['approved','Approved'],['rejected','Rejected']]; %>
+    <% filters.forEach(function(f) { %>
+    <a href="/mentor?filter=<%= f[0] %>"
+       class="ftab <%= filter_by === f[0] ? 'active' : '' %>"><%= f[1] %></a>
+    <% }); %>
+  </div>
+
+  <% if (subs && subs.length) { %>
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Student Name</th>
+          <th>Roll No.</th>
+          <th>Sem</th>
+          <th>Dept</th>
+          <th>Certificate</th>
+          <th>Marks</th>
+          <th>Auto Status</th>
+          <th>Mentor Decision</th>
+          <th>Submitted</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+      <% subs.forEach(function(sub, idx) { %>
+      <tr>
+        <td class="idx"><%= idx + 1 %></td>
+        <td><strong><%= sub.student_name %></strong></td>
+        <td><%= sub.roll_number %></td>
+        <td><%= sub.semester %></td>
+        <td class="dept-cell"><%= sub.department %></td>
+        <td class="cert-cell"><%= sub.matched_cert || '—' %></td>
+        <td class="center">
+          <% if (sub.marks_awarded) { %>
+            <span class="marks-pill"><%= sub.marks_awarded %></span>
+          <% } else { %>—<% } %>
+        </td>
+        <td>
+          <% if (sub.final_status === 'ELIGIBLE') { %>
+            <span class="badge pass">ELIGIBLE</span>
+          <% } else if ((sub.final_status || '').includes('MENTOR')) { %>
+            <span class="badge warn">NEEDS REVIEW</span>
+          <% } else { %>
+            <span class="badge fail">NOT ELIGIBLE</span>
+          <% } %>
+        </td>
+        <td>
+          <% if (sub.mentor_decision === 'APPROVED') { %>
+            <span class="badge pass">APPROVED</span>
+          <% } else if (sub.mentor_decision === 'REJECTED') { %>
+            <span class="badge fail">REJECTED</span>
+          <% } else if (sub.mentor_decision === 'PENDING') { %>
+            <span class="badge warn">PENDING</span>
+          <% } else { %>
+            <span class="badge neutral">N/A</span>
+          <% } %>
+        </td>
+        <td class="date-cell"><%= (sub.submitted_at || '').slice(0, 16) %></td>
+        <td style="white-space:nowrap">
+          <a href="/mentor/submission/<%= sub.id %>" class="btn-small">Review</a>
+          <a href="/mentor/file/<%= sub.id %>" target="_blank" class="btn-small btn-small-file" title="View Certificate">&#128196;</a>
+        </td>
+      </tr>
+      <% }); %>
+      </tbody>
+    </table>
+  </div>
+  <% } else { %>
+  <div class="empty-state">
+    <p>No submissions found for this filter.</p>
+  </div>
+  <% } %>
+</div>
+</body>
+</html>

@@ -1,0 +1,23 @@
+[
+  {
+    "track_id": 18,
+    "name": "SQL",
+    "slug": "sql",
+    "practice": { "hacker_id": 12345, "score": 45.0, "rank": 1000 },
+    "contest": { "score": 0, "rank": "N/A", "level": 5, "medals": { "gold": 0, "silver": 0, "bronze": 0 } }
+  },
+  {
+    "track_id": 1,
+    "name": "Algorithms",
+    "slug": "algorithms",
+    "practice": { "hacker_id": 12345, "score": 120.0, "rank": 500 },
+    "contest": { "score": 0, "rank": "N/A", "level": 5, "medals": { "gold": 0, "silver": 0, "bronze": 0 } }
+  },
+  {
+    "track_id": 5,
+    "name": "Data Structures",
+    "slug": "data-structures",
+    "practice": { "hacker_id": 12345, "score": 80.0, "rank": 800 },
+    "contest": { "score": 0, "rank": "N/A", "level": 5, "medals": { "gold": 0, "silver": 0, "bronze": 0 } }
+  }
+]

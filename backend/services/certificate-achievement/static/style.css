@@ -1,0 +1,159 @@
+/* ── Reset ─────────────────────────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f2f7;color:#1a1a2e;min-height:100vh}
+
+/* ── Navbar ────────────────────────────────────────────────────── */
+.navbar{display:flex;align-items:center;gap:1rem;padding:.85rem 2rem;background:#0f3460;color:#fff;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.nav-brand{font-size:1.2rem;font-weight:800;color:#fff;text-decoration:none;letter-spacing:.03em}
+.nav-tag{font-size:.8rem;background:rgba(255,255,255,.15);padding:.2rem .7rem;border-radius:999px}
+.nav-links{margin-left:auto;display:flex;gap:1rem;align-items:center}
+.nav-links a{color:rgba(255,255,255,.85);text-decoration:none;font-size:.9rem}
+.nav-links a:hover{color:#fff}
+.btn-nav{background:rgba(255,255,255,.18);color:#fff !important;padding:.35rem .9rem;border-radius:6px;font-size:.85rem;text-decoration:none !important}
+.btn-nav:hover{background:rgba(255,255,255,.3) !important}
+
+/* ── Page wrap ─────────────────────────────────────────────────── */
+.page-wrap{max-width:900px;margin:0 auto;padding:2rem 1.25rem 4rem}
+.page-wrap.wide{max-width:1200px}
+.page-wrap.narrow{max-width:440px}
+.page-header{text-align:center;margin-bottom:1.75rem}
+.page-header h1{font-size:1.8rem;font-weight:700;color:#0f3460}
+.page-header p{color:#555;margin-top:.3rem;font-size:.95rem}
+
+/* ── Marks strip ───────────────────────────────────────────────── */
+.marks-strip{display:flex;flex-wrap:wrap;gap:.5rem;background:#fff;border-radius:10px;padding:.85rem 1.25rem;margin-bottom:1.5rem;box-shadow:0 1px 6px rgba(0,0,0,.07);align-items:center}
+.ms-item{display:flex;flex-direction:column;align-items:center;min-width:70px;padding:.3rem .5rem}
+.ms-label{font-size:.72rem;color:#666;white-space:nowrap}
+.ms-val{font-size:1rem;font-weight:700;color:#0f3460}
+.ms-sep{width:1px;height:40px;background:#e0e0e0;margin:0 .25rem}
+.ms-cap .ms-val{color:#e53935}
+
+/* ── Form card ─────────────────────────────────────────────────── */
+.form-card{background:#fff;border-radius:12px;padding:2rem;box-shadow:0 2px 12px rgba(0,0,0,.08);margin-bottom:1.5rem}
+.section-title{font-size:1rem;font-weight:700;color:#0f3460;margin-bottom:1rem;padding-bottom:.4rem;border-bottom:2px solid #e8ecf8}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.form-grid .full{grid-column:1/-1}
+@media(max-width:600px){.form-grid{grid-template-columns:1fr}}
+
+.field{display:flex;flex-direction:column;gap:.3rem}
+.field label{font-size:.88rem;font-weight:600;color:#333}
+.field input,.field select,.field textarea{
+  padding:.6rem .85rem;border:1.5px solid #d0d5e8;border-radius:7px;
+  font-size:.95rem;font-family:inherit;background:#fff;transition:border-color .2s}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:#0f3460}
+.field textarea{resize:vertical;min-height:80px}
+.req{color:#e53935}
+.opt{font-weight:400;color:#888;font-size:.8rem}
+.hint{font-size:.78rem;color:#888}
+
+/* ── Drop zone ─────────────────────────────────────────────────── */
+.drop-zone{border:2px dashed #b8c0d8;border-radius:10px;padding:2.2rem 1rem;text-align:center;cursor:pointer;transition:background .2s,border-color .2s;color:#555}
+.drop-zone:hover,.drop-zone.drag-over{background:#eef2ff;border-color:#0f3460}
+.drop-icon{font-size:2.2rem;margin-bottom:.5rem}
+.drop-zone p{font-size:.9rem;margin:.15rem 0}
+.browse-link{color:#0f3460;font-weight:700;cursor:pointer;text-decoration:underline}
+.file-name{font-size:.82rem;color:#333;margin-top:.4rem;min-height:1.2em}
+
+/* ── Buttons ───────────────────────────────────────────────────── */
+.form-actions{margin-top:1.5rem;display:flex;gap:1rem;flex-wrap:wrap}
+.btn-primary,.btn-secondary{padding:.7rem 1.75rem;border:none;border-radius:8px;font-size:.97rem;font-weight:600;cursor:pointer;transition:opacity .15s,transform .1s;font-family:inherit}
+.btn-primary{background:#0f3460;color:#fff}
+.btn-secondary{background:#e9ecef;color:#333}
+.btn-primary:hover{opacity:.88}
+.btn-secondary:hover{background:#dee2e6}
+.btn-primary:active,.btn-secondary:active{transform:scale(.97)}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed}
+.btn-small{padding:.3rem .75rem;background:#0f3460;color:#fff;border-radius:5px;font-size:.8rem;text-decoration:none;white-space:nowrap}
+.btn-small:hover{opacity:.85}
+.btn-small-file{background:#475569;margin-left:.35rem;padding:.3rem .55rem}
+.btn-view-cert{display:inline-block;padding:.55rem 1.4rem;background:#0f3460;color:#fff;border-radius:8px;font-size:.95rem;font-weight:600;text-decoration:none}
+.btn-view-cert:hover{opacity:.85}
+.btn-download-cert{display:inline-block;padding:.55rem 1.4rem;background:#475569;color:#fff;border-radius:8px;font-size:.95rem;font-weight:600;text-decoration:none}
+.btn-download-cert:hover{opacity:.85}
+
+/* ── Spinner ───────────────────────────────────────────────────── */
+.spinner{display:flex;flex-direction:column;align-items:center;gap:1rem;padding:2rem;color:#555;background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.08)}
+.spin-ring{width:48px;height:48px;border:5px solid #e0e0e0;border-top-color:#0f3460;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── Status banner ─────────────────────────────────────────────── */
+.status-banner{text-align:center;padding:1rem;border-radius:8px;font-size:1.1rem;font-weight:700;letter-spacing:.04em;margin-bottom:1.25rem}
+.status-banner.pass,.status-banner.pass-card .rpt-card-title{background:#d1fae5 !important;color:#065f46}
+.status-banner.fail{background:#fee2e2;color:#991b1b}
+.status-banner.mentor{background:#fef3c7;color:#92400e}
+.status-banner.neutral{background:#f3f4f6;color:#374151}
+
+/* ── Result / report grid ──────────────────────────────────────── */
+.result-card{background:transparent;margin-top:1.5rem}
+.link-row{margin-top:1rem;text-align:center}
+.report-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+@media(max-width:680px){.report-grid{grid-template-columns:1fr}}
+.rpt-card{background:#fff;border-radius:10px;padding:1.2rem 1.4rem;box-shadow:0 1px 8px rgba(0,0,0,.07)}
+.rpt-card-title{font-size:.82rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#0f3460;margin-bottom:.75rem;padding-bottom:.4rem;border-bottom:2px solid #e8ecf8}
+.mentor-card{border-left:4px solid #f59e0b;background:#fffbeb}
+.mentor-card .rpt-card-title{color:#92400e}
+.pass-card{border-left:4px solid #10b981}
+.fail-card{border-left:4px solid #ef4444}
+.rpt-card table{width:100%;border-collapse:collapse;font-size:.88rem}
+.rpt-card td{padding:.4rem .3rem;border-bottom:1px solid #f4f4f8;vertical-align:top}
+.rc-label{font-weight:600;color:#555;white-space:nowrap;width:40%;padding-right:.5rem}
+.big-num{font-size:1.4rem;font-weight:800;color:#0f3460}
+.mentor-note{color:#92400e}
+.reason-list{padding-left:1.2rem;font-size:.88rem;color:#555;line-height:1.8}
+.error-msg{color:#991b1b;padding:1rem 0}
+.pending-note{color:#92400e;font-size:.9rem;margin-bottom:1rem}
+.mentor-form .mentor-btns{display:flex;gap:.75rem;margin-top:.75rem}
+.btn-approve{flex:1;padding:.65rem;background:#10b981;color:#fff;border:none;border-radius:7px;font-weight:700;cursor:pointer;font-size:.95rem}
+.btn-approve:hover{background:#059669}
+.btn-reject{flex:1;padding:.65rem;background:#ef4444;color:#fff;border:none;border-radius:7px;font-weight:700;cursor:pointer;font-size:.95rem}
+.btn-reject:hover{background:#dc2626}
+
+/* ── Badge ─────────────────────────────────────────────────────── */
+.badge{display:inline-block;padding:.15rem .65rem;border-radius:999px;font-size:.78rem;font-weight:700;white-space:nowrap}
+.badge.pass{background:#d1fae5;color:#065f46}
+.badge.fail{background:#fee2e2;color:#991b1b}
+.badge.warn{background:#fef3c7;color:#92400e}
+.badge.neutral{background:#f3f4f6;color:#374151}
+
+/* ── Stats row ─────────────────────────────────────────────────── */
+.stats-row{display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1.5rem}
+.stat-card{flex:1;min-width:110px;background:#fff;border-radius:10px;padding:1rem 1.25rem;text-align:center;box-shadow:0 1px 6px rgba(0,0,0,.07)}
+.stat-card.warn{border-top:4px solid #f59e0b}
+.stat-card.pass{border-top:4px solid #10b981}
+.stat-card.fail{border-top:4px solid #ef4444}
+.stat-num{font-size:2rem;font-weight:800;color:#0f3460}
+.stat-label{font-size:.78rem;color:#777;margin-top:.2rem}
+
+/* ── Filter tabs ───────────────────────────────────────────────── */
+.filter-tabs{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem}
+.ftab{padding:.4rem 1rem;border-radius:6px;background:#fff;color:#555;text-decoration:none;font-size:.88rem;font-weight:600;box-shadow:0 1px 4px rgba(0,0,0,.07)}
+.ftab:hover,.ftab.active{background:#0f3460;color:#fff}
+
+/* ── Data table ────────────────────────────────────────────────── */
+.table-wrap{overflow-x:auto;background:#fff;border-radius:10px;box-shadow:0 1px 8px rgba(0,0,0,.08)}
+.data-table{width:100%;border-collapse:collapse;font-size:.875rem}
+.data-table th{background:#0f3460;color:#fff;padding:.65rem .75rem;text-align:left;font-weight:600;white-space:nowrap}
+.data-table td{padding:.6rem .75rem;border-bottom:1px solid #f0f0f5;vertical-align:middle}
+.data-table tr:last-child td{border-bottom:none}
+.data-table tr:hover td{background:#f8f9ff}
+.idx{color:#aaa;font-size:.8rem}
+.center{text-align:center}
+.dept-cell{max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cert-cell{max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.date-cell{font-size:.8rem;color:#777;white-space:nowrap}
+.marks-pill{background:#0f3460;color:#fff;padding:.15rem .6rem;border-radius:999px;font-weight:700;font-size:.85rem}
+
+/* ── Flash messages ────────────────────────────────────────────── */
+.flash-error{background:#fee2e2;color:#991b1b;padding:.75rem 1rem;border-radius:7px;margin-bottom:1rem;font-size:.9rem}
+.flash-ok{background:#d1fae5;color:#065f46;padding:.75rem 1rem;border-radius:7px;margin-bottom:1rem;font-size:.9rem}
+
+/* ── Empty state ───────────────────────────────────────────────── */
+.empty-state{text-align:center;padding:3rem;color:#888;background:#fff;border-radius:10px;box-shadow:0 1px 6px rgba(0,0,0,.07)}
+
+/* ── External links ────────────────────────────────────────────── */
+.link-external{color:#0f3460;word-break:break-all;font-size:.85rem}
+.link-external:hover{text-decoration:underline}
+
+/* ── Utility ───────────────────────────────────────────────────── */
+.hidden{display:none !important}
+code{background:#f3f4f6;padding:.1rem .4rem;border-radius:4px;font-size:.85rem}

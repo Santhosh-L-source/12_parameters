@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Student Portal — Foreign Language Proficiency</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --blue:        #2563eb; --blue-dark: #1d4ed8; --blue-mid: #3b82f6;
+      --blue-light:  #eff4ff; --blue-lighter: #dbeafe; --blue-glow: rgba(37,99,235,.12);
+      --border:      #dbe4f8; --border2: #c2d0f5;
+      --green:       #16a34a; --green-bg: #f0fdf4; --green-bdr: #bbf7d0;
+      --red:         #dc2626; --red-bg: #fef2f2; --red-bdr: #fecaca;
+      --yellow:      #d97706; --yellow-bg: #fffbeb; --yellow-bdr: #fde68a;
+      --purple:      #7c3aed; --purple-bg: #f5f3ff; --purple-bdr: #ede9fe;
+      --bg: #f0f4ff; --white: #ffffff; --surface2: #f5f8ff;
+      --text: #0f172a; --text2: #334155; --text3: #64748b; --text4: #94a3b8;
+      --radius: 12px; --radius-sm: 8px;
+      --font: 'Inter', system-ui, sans-serif; --mono: 'JetBrains Mono', monospace;
+      --shadow: 0 1px 3px rgba(15,23,42,.07), 0 4px 16px rgba(37,99,235,.05);
+    }
+    html { font-size: 14px; }
+    body { background: var(--bg); color: var(--text); font-family: var(--font); line-height: 1.6; min-height: 100vh; }
+
+    nav {
+      background: var(--white); border-bottom: 1px solid var(--border);
+      padding: 0 28px; height: 58px;
+      display: flex; align-items: center; gap: 10px;
+      position: sticky; top: 0; z-index: 100;
+      box-shadow: 0 1px 4px rgba(37,99,235,.06);
+    }
+    .logo { width:32px; height:32px; background:linear-gradient(135deg,var(--blue),#60a5fa); border-radius:8px; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:13px; color:#fff; box-shadow:0 2px 8px rgba(37,99,235,.28); flex-shrink:0; }
+    .nav-title { font-size:14px; font-weight:700; color:var(--text); }
+    .nav-sep   { color:var(--text4); margin:0 2px; }
+    .nav-sub   { font-size:13px; font-weight:500; color:var(--text3); }
+    .nav-right { margin-left:auto; display:flex; align-items:center; gap:8px; }
+    .chip { padding:4px 12px; border-radius:20px; font-size:11px; font-weight:600; letter-spacing:.03em; }
+    .chip-blue  { background:var(--blue-light); color:var(--blue); border:1px solid var(--blue-lighter); }
+    .chip-green { background:var(--green-bg); color:var(--green); border:1px solid var(--green-bdr); display:flex; align-items:center; gap:5px; }
+    .chip-green::before { content:''; width:6px; height:6px; border-radius:50%; background:var(--green); animation:pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+    .nav-link { font-size:12px; font-weight:600; color:var(--blue); text-decoration:none; padding:4px 10px; border:1px solid var(--blue-lighter); border-radius:6px; background:var(--blue-light); transition:background .15s; }
+    .nav-link:hover { background:var(--blue-lighter); }
+
+    .ctx-bar { background:var(--white); border-bottom:1px solid var(--border); padding:14px 28px; display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap; }
+    .ctx-field { display:flex; flex-direction:column; gap:5px; }
+    .ctx-field label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--text3); }
+    .ctx-field input, .ctx-field select { height:38px; padding:0 12px; background:var(--surface2); border:1px solid var(--border2); border-radius:var(--radius-sm); color:var(--text); font-family:var(--font); font-size:13px; font-weight:500; outline:none; transition:border-color .15s,box-shadow .15s; appearance:none; }
+    .ctx-field input { min-width:200px; }
+    .ctx-field select { min-width:160px; }
+    .ctx-field input:focus, .ctx-field select:focus { border-color:var(--blue); box-shadow:0 0 0 3px var(--blue-glow); }
+    .select-wrap { position:relative; }
+    .select-wrap::after { content:'▾'; position:absolute; right:10px; top:50%; transform:translateY(-50%); color:var(--text4); pointer-events:none; font-size:11px; }
+    .ctx-btn { height:38px; padding:0 20px; background:var(--blue); color:#fff; border:none; border-radius:var(--radius-sm); font-family:var(--font); font-size:13px; font-weight:600; cursor:pointer; transition:background .15s; white-space:nowrap; box-shadow:0 2px 8px rgba(37,99,235,.2); }
+    .ctx-btn:hover { background:var(--blue-dark); }
+
+    .page { padding:24px 28px; max-width:1340px; margin:0 auto; }
+
+    /* Hero */
+    .hero { display:grid; grid-template-columns:auto 1fr auto; gap:28px; align-items:center; background:var(--white); border:1px solid var(--border); border-radius:var(--radius); padding:24px 28px; margin-bottom:22px; box-shadow:var(--shadow); position:relative; overflow:hidden; }
+    .hero::after { content:''; position:absolute; top:0; right:0; width:300px; height:100%; background:linear-gradient(135deg,transparent 30%,var(--blue-light) 100%); pointer-events:none; }
+    .ring-wrap { position:relative; width:96px; height:96px; flex-shrink:0; z-index:1; }
+    .ring-wrap svg { transform:rotate(-90deg); }
+    .ring-track { fill:none; stroke:var(--blue-lighter); stroke-width:7; }
+    .ring-fill  { fill:none; stroke:url(#rg); stroke-width:7; stroke-linecap:round; stroke-dasharray:283; stroke-dashoffset:283; transition:stroke-dashoffset .65s cubic-bezier(.4,0,.2,1); }
+    .ring-text  { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+    .ring-num   { font-family:var(--mono); font-size:26px; font-weight:700; color:var(--blue); line-height:1; }
+    .ring-denom { font-size:11px; color:var(--text3); font-weight:500; margin-top:1px; }
+    .hero-info  { z-index:1; }
+    .hero-eye   { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.1em; color:var(--blue); margin-bottom:4px; }
+    .hero-title { font-size:20px; font-weight:800; color:var(--text); margin-bottom:8px; }
+    .hero-pills { display:flex; flex-wrap:wrap; gap:8px; }
+    .pill { display:inline-flex; align-items:center; gap:6px; padding:4px 12px; background:var(--surface2); border:1px solid var(--border); border-radius:20px; font-size:12px; font-weight:500; color:var(--text2); }
+    .dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+    .dot.blue{background:var(--blue);} .dot.green{background:var(--green);} .dot.orange{background:#f59e0b;}
+    .cefr-table { background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius-sm); overflow:hidden; min-width:225px; z-index:1; }
+    .cefr-row { display:flex; align-items:center; padding:9px 14px; gap:12px; border-bottom:1px solid var(--border); transition:background .15s; }
+    .cefr-row:last-child { border-bottom:none; }
+    .cefr-row.active { background:var(--blue-light); }
+    .cb { font-family:var(--mono); font-size:11px; font-weight:700; padding:2px 7px; border-radius:5px; min-width:32px; text-align:center; }
+    .cb.a1{background:#dcfce7;color:#15803d;} .cb.a2{background:#d1fae5;color:#047857;} .cb.b1{background:var(--blue-lighter);color:var(--blue);} .cb.b2{background:#ede9fe;color:#7c3aed;}
+    .cefr-lbl { font-size:12px; color:var(--text3); flex:1; }
+    .cefr-pts { font-family:var(--mono); font-size:13px; font-weight:700; color:var(--text); }
+    .cefr-row.active .cefr-pts { color:var(--blue); }
+
+    /* Layout */
+    .layout { display:grid; grid-template-columns:390px 1fr; gap:20px; align-items:start; }
+    .left-col,.right-col { display:flex; flex-direction:column; gap:16px; }
+
+    /* Card */
+    .card { background:var(--white); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); }
+    .card-hd { padding:14px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+    .card-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--text3); }
+    .card-body  { padding:20px; }
+
+    /* Form */
+    .field { margin-top:13px; }
+    .field:first-child { margin-top:0; }
+    .field label { display:block; font-size:12px; font-weight:600; color:var(--text2); margin-bottom:5px; }
+    .field input, .field select, .field textarea {
+      width:100%; background:var(--white); border:1px solid var(--border2);
+      border-radius:var(--radius-sm); color:var(--text);
+      padding:9px 12px; font-size:13px; font-family:var(--font);
+      outline:none; transition:border-color .15s,box-shadow .15s; appearance:none;
+    }
+    .field input::placeholder,.field textarea::placeholder { color:var(--text4); }
+    .field input:focus,.field select:focus,.field textarea:focus { border-color:var(--blue); box-shadow:0 0 0 3px var(--blue-glow); }
+    .field-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .sel-wrap { position:relative; }
+    .sel-wrap::after { content:'▾'; position:absolute; right:10px; top:50%; transform:translateY(-50%); color:var(--text4); pointer-events:none; font-size:11px; }
+    .field-hint { font-size:11px; color:var(--text4); margin-top:5px; }
+    .field-hint.warn { color:var(--yellow); }
+    .field-hint.info { color:var(--blue); }
+
+    .jlpt-section { margin-top:13px; background:var(--surface2); border:1px solid var(--border2); border-radius:var(--radius-sm); padding:14px; }
+    .jlpt-section-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--blue); margin-bottom:10px; }
+    .jlpt-suggest { margin-top:10px; padding:8px 12px; background:var(--blue-light); border:1px solid var(--blue-lighter); border-radius:6px; font-size:12px; color:var(--blue); }
+    .jlpt-suggest strong { font-weight:700; }
+
+    .btn-submit { width:100%; margin-top:16px; padding:11px; background:var(--blue); color:#fff; border:none; border-radius:var(--radius-sm); font-family:var(--font); font-size:13px; font-weight:600; cursor:pointer; transition:background .15s; box-shadow:0 2px 8px rgba(37,99,235,.22); }
+    .btn-submit:hover { background:var(--blue-dark); }
+    .toast { margin-top:12px; padding:10px 14px; border-radius:var(--radius-sm); font-size:12px; font-weight:500; opacity:0; transform:translateY(-4px); transition:opacity .2s,transform .2s; pointer-events:none; }
+    .toast.show { opacity:1; transform:none; pointer-events:auto; }
+    .toast.ok  { background:var(--green-bg); border:1px solid var(--green-bdr); color:var(--green); }
+    .toast.err { background:var(--red-bg);   border:1px solid var(--red-bdr);   color:var(--red); }
+    .hint { display:flex; align-items:flex-start; gap:9px; margin-top:14px; padding:11px 13px; background:var(--blue-light); border:1px solid var(--blue-lighter); border-radius:var(--radius-sm); font-size:12px; color:var(--text2); line-height:1.5; }
+    .hint-icon { width:16px; height:16px; border-radius:50%; background:var(--blue-lighter); color:var(--blue); display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; flex-shrink:0; margin-top:1px; }
+
+    /* Exam reference guide */
+    .ref-guide { }
+    .ref-lang { margin-bottom:14px; }
+    .ref-lang:last-child { margin-bottom:0; }
+    .ref-lang-name { font-size:12px; font-weight:700; color:var(--text); margin-bottom:6px; display:flex; align-items:center; gap:8px; }
+    .ref-lang-flag { font-size:15px; }
+    .ref-exam-list { display:flex; flex-direction:column; gap:4px; }
+    .ref-exam-row { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text2); }
+    .ref-exam-name { font-weight:600; min-width:80px; }
+    .ref-exam-maps { color:var(--text3); font-size:11px; }
+    .ref-divider { border:none; border-top:1px solid var(--border); margin:14px 0; }
+
+    /* JLPT score table */
+    .jlpt-ref-table { width:100%; border-collapse:collapse; font-size:12px; margin-top:8px; }
+    .jlpt-ref-table th { background:var(--surface2); padding:6px 10px; text-align:left; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--text4); border-bottom:1px solid var(--border); }
+    .jlpt-ref-table td { padding:6px 10px; border-bottom:1px solid var(--border); color:var(--text2); }
+    .jlpt-ref-table tr:last-child td { border-bottom:none; }
+    .jlpt-ref-table .mono { font-family:var(--mono); font-size:11px; }
+
+    /* Semester targets */
+    .sem-targets { display:flex; flex-direction:column; gap:6px; }
+    .sem-row { display:flex; align-items:center; gap:10px; font-size:12px; }
+    .sem-badge { font-family:var(--mono); font-size:10px; font-weight:700; padding:2px 7px; border-radius:4px; background:var(--surface2); border:1px solid var(--border2); color:var(--text3); min-width:26px; text-align:center; }
+    .sem-row.current .sem-badge { background:var(--blue); color:#fff; border-color:var(--blue); }
+    .sem-target { color:var(--text2); flex:1; }
+    .sem-row.current .sem-target { color:var(--blue); font-weight:600; }
+
+    /* Language breakdown */
+    .lang-grid { display:flex; flex-wrap:wrap; gap:10px; padding:16px 20px; }
+    .lang-card { background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius-sm); padding:14px 16px; min-width:120px; flex:1; position:relative; transition:border-color .2s,box-shadow .2s; }
+    .lang-card.best { border-color:var(--blue); box-shadow:0 0 0 1px var(--blue-lighter),0 2px 10px rgba(37,99,235,.12); background:var(--blue-light); }
+    .lc-name { font-size:13px; font-weight:700; color:var(--text); margin-bottom:5px; }
+    .lc-cefr { font-family:var(--mono); font-size:11px; font-weight:700; padding:2px 6px; border-radius:4px; background:var(--blue-lighter); color:var(--blue); display:inline-block; margin-bottom:8px; }
+    .lang-card.best .lc-cefr { background:var(--blue); color:#fff; }
+    .lc-pts { font-family:var(--mono); font-size:21px; font-weight:700; color:var(--text3); }
+    .lang-card.best .lc-pts { color:var(--blue); }
+    .lc-pts-lbl { font-size:10px; color:var(--text4); }
+    .lc-crown { position:absolute; top:8px; right:10px; font-size:14px; }
+
+    /* Table */
+    .table-wrap { overflow-x:auto; }
+    table { width:100%; border-collapse:collapse; font-size:13px; }
+    th { text-align:left; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--text4); padding:10px 14px; border-bottom:1px solid var(--border); background:var(--surface2); white-space:nowrap; }
+    td { padding:12px 14px; border-bottom:1px solid var(--border); vertical-align:middle; color:var(--text2); }
+    tr:last-child td { border-bottom:none; }
+    tbody tr:hover td { background:var(--surface2); }
+    .td-lang { font-weight:600; color:var(--text); }
+    .cefr-chip { font-family:var(--mono); font-size:11px; font-weight:700; padding:3px 8px; border-radius:5px; background:var(--blue-lighter); color:var(--blue); }
+    .sbadge { display:inline-flex; align-items:center; gap:5px; padding:3px 9px; border-radius:20px; font-size:11px; font-weight:600; }
+    .sbadge::before { content:''; width:5px; height:5px; border-radius:50%; }
+    .sbadge.pending  { background:var(--yellow-bg); color:var(--yellow); border:1px solid var(--yellow-bdr); }
+    .sbadge.pending::before  { background:var(--yellow); animation:pulse 2s infinite; }
+    .sbadge.approved { background:var(--green-bg);  color:var(--green);  border:1px solid var(--green-bdr); }
+    .sbadge.approved::before { background:var(--green); }
+    .sbadge.rejected { background:var(--red-bg);    color:var(--red);    border:1px solid var(--red-bdr); }
+    .sbadge.rejected::before { background:var(--red); }
+    .marks-cell { font-family:var(--mono); font-size:12px; font-weight:600; color:var(--text4); }
+    .marks-cell.win { color:var(--blue); }
+    .marks-cell.win::after { content:' ★'; font-size:10px; }
+    .table-note { padding:10px 14px; font-size:11px; color:var(--text4); border-top:1px solid var(--border); }
+    .table-note strong { color:var(--blue); }
+    .jlpt-tag { font-family:var(--mono); font-size:10px; font-weight:700; padding:2px 5px; border-radius:3px; background:var(--purple-bg); color:var(--purple); border:1px solid var(--purple-bdr); margin-left:4px; }
+
+    /* Empty */
+    .empty { padding:44px 20px; text-align:center; }
+    .empty-icon { width:48px; height:48px; background:var(--blue-light); border:1px solid var(--blue-lighter); border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:22px; margin:0 auto 12px; }
+    .empty-title { font-size:14px; font-weight:700; color:var(--text); margin-bottom:4px; }
+    .empty-sub   { font-size:12px; color:var(--text4); }
+
+    /* Log */
+    .log-wrap { max-height:200px; overflow-y:auto; padding:12px 20px 16px; display:flex; flex-direction:column; gap:0; }
+    .log-wrap::-webkit-scrollbar { width:4px; }
+    .log-wrap::-webkit-scrollbar-thumb { background:var(--border2); border-radius:2px; }
+    .log-entry { display:flex; gap:12px; padding:7px 0 7px 14px; border-left:2px solid var(--border2); margin-left:6px; position:relative; animation:si .2s ease; }
+    .log-entry::before { content:''; position:absolute; left:-5px; top:13px; width:8px; height:8px; border-radius:50%; background:var(--border2); border:2px solid var(--white); }
+    .log-entry.ok::before  { background:var(--green); }
+    .log-entry.err::before { background:var(--red); }
+    .log-entry.info::before{ background:var(--blue); }
+    @keyframes si { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:none} }
+    .log-time { font-family:var(--mono); font-size:10px; color:var(--text4); white-space:nowrap; padding-top:2px; }
+    .log-msg  { font-size:12px; color:var(--text2); line-height:1.5; }
+    .log-msg strong { color:var(--text); }
+    .log-init { font-size:11px; color:var(--text4); text-align:center; padding:10px 0 2px; font-family:var(--mono); }
+
+    .err-banner { display:none; margin-bottom:16px; padding:12px 16px; background:var(--red-bg); border:1px solid var(--red-bdr); border-radius:var(--radius-sm); font-size:13px; color:var(--red); font-weight:500; }
+    .err-banner.show { display:block; }
+
+    /* Collapsible guide toggle */
+    .guide-toggle { font-size:12px; font-weight:600; color:var(--blue); cursor:pointer; background:none; border:none; font-family:var(--font); padding:0; display:flex; align-items:center; gap:5px; }
+    .guide-content { display:none; }
+    .guide-content.open { display:block; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">FL</div>
+  <span class="nav-title">Placement Platform</span>
+  <span class="nav-sep">/</span>
+  <span class="nav-sub">Foreign Language Proficiency</span>
+  <div class="nav-right">
+    <span class="chip chip-green">Student</span>
+    <span class="chip chip-blue">MAX 15 pts</span>
+    <a class="nav-link" href="mentor.html">Mentor Panel →</a>
+    <a class="nav-link" href="index.html">← Home</a>
+  </div>
+</nav>
+
+<div class="ctx-bar">
+  <div class="ctx-field">
+    <label>Register Number</label>
+    <input id="regNum" placeholder="e.g. 21CSE001" oninput="saveReg()" />
+  </div>
+  <div class="ctx-field">
+    <label>Current Semester</label>
+    <div class="select-wrap">
+      <select id="semSelect"></select>
+    </div>
+  </div>
+  <button class="ctx-btn" onclick="loadRecords()">Load Records</button>
+</div>
+
+<div class="page">
+  <div id="errBanner" class="err-banner"></div>
+
+  <!-- Score hero -->
+  <div class="hero">
+    <div class="ring-wrap">
+      <svg width="96" height="96" viewBox="0 0 100 100">
+        <defs>
+          <linearGradient id="rg" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#2563eb" />
+            <stop offset="100%" stop-color="#60a5fa" />
+          </linearGradient>
+        </defs>
+        <circle class="ring-track" cx="50" cy="50" r="45"/>
+        <circle class="ring-fill"  cx="50" cy="50" r="45" id="ringArc"/>
+      </svg>
+      <div class="ring-text">
+        <span class="ring-num" id="scoreNum">0</span>
+        <span class="ring-denom">/ 15</span>
+      </div>
+    </div>
+    <div class="hero-info">
+      <div class="hero-eye">Parameter Score</div>
+      <div class="hero-title">Foreign Language Proficiency</div>
+      <div class="hero-pills">
+        <span class="pill"><span class="dot blue"></span>MAX-across-languages (not SUM)</span>
+        <span class="pill"><span class="dot green"></span>One non-English language</span>
+        <span class="pill"><span class="dot orange"></span>Highest CEFR tier wins</span>
+      </div>
+    </div>
+    <div class="cefr-table">
+      <div class="cefr-row" id="cr-a1">
+        <span class="cb a1">A1</span>
+        <span class="cefr-lbl">Elementary</span>
+        <span class="cefr-pts">7</span>
+      </div>
+      <div class="cefr-row" id="cr-a2">
+        <span class="cb a2">A2</span>
+        <span class="cefr-lbl">Pre-Intermediate</span>
+        <span class="cefr-pts">12</span>
+      </div>
+      <div class="cefr-row" id="cr-b1">
+        <span class="cb b1">B1</span>
+        <span class="cefr-lbl">Intermediate</span>
+        <span class="cefr-pts">15</span>
+      </div>
+      <div class="cefr-row" id="cr-b2">
+        <span class="cb b2">B2+</span>
+        <span class="cefr-lbl">Advanced (capped at 15)</span>
+        <span class="cefr-pts">15</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="layout">
+
+    <!-- LEFT: Submit form -->
+    <div class="left-col">
+      <div class="card">
+        <div class="card-hd"><span class="card-title">Submit Evidence</span></div>
+        <div class="card-body">
+
+          <!-- Language -->
+          <div class="field">
+            <label>Language</label>
+            <div class="sel-wrap">
+              <select id="langSelect" onchange="onLanguageChange()">
+                <option value="">— Select language —</option>
+                <option value="Japanese">Japanese</option>
+                <option value="German">German</option>
+                <option value="French">French</option>
+                <option value="Spanish">Spanish</option>
+                <option value="Mandarin Chinese">Mandarin Chinese</option>
+                <option value="Korean">Korean</option>
+                <option value="Arabic">Arabic</option>
+                <option value="Hindi">Hindi</option>
+                <option value="other">Other (central review required)</option>
+              </select>
+            </div>
+          </div>
+          <div class="field" id="otherLangField" style="display:none;">
+            <label>Specify Language</label>
+            <input id="otherLangName" placeholder="e.g. Portuguese, Italian…" />
+            <div class="field-hint warn">Other languages require a central review before marks are awarded.</div>
+          </div>
+
+          <!-- Certifying body (dynamic) -->
+          <div class="field">
+            <label>Certifying Body / Exam</label>
+            <div class="sel-wrap">
+              <select id="certBodySelect" onchange="onExamChange()">
+                <option value="">— Select exam —</option>
+              </select>
+            </div>
+            <div class="field-hint" id="certBodyHint"></div>
+          </div>
+
+          <!-- JLPT section -->
+          <div class="jlpt-section" id="jlptSection" style="display:none;">
+            <div class="jlpt-section-title">JLPT Details</div>
+            <div class="field-row">
+              <div class="field" style="margin-top:0;">
+                <label>JLPT Level</label>
+                <div class="sel-wrap">
+                  <select id="jlptLevel" onchange="onJlptChange()">
+                    <option value="">— Select —</option>
+                    <option value="N5">N5</option>
+                    <option value="N4">N4</option>
+                    <option value="N3">N3</option>
+                    <option value="N2">N2</option>
+                    <option value="N1">N1</option>
+                  </select>
+                </div>
+              </div>
+              <div class="field" style="margin-top:0;">
+                <label>Score <span style="color:var(--text4);font-weight:400;">(if available)</span></label>
+                <input id="jlptScore" type="number" min="0" max="180" placeholder="e.g. 106" oninput="onJlptChange()" />
+              </div>
+            </div>
+            <div class="field">
+              <label>Certificate Date</label>
+              <input id="certDate" type="date" oninput="onJlptChange()" />
+              <div class="field-hint info">Certificates dated Dec 2025 or later show the CEFR level directly.</div>
+            </div>
+            <div id="jlptSuggest" class="jlpt-suggest" style="display:none;"></div>
+          </div>
+
+          <!-- Non-JLPT cert date -->
+          <div class="field" id="certDateNonJlptField" style="display:none;">
+            <label>Certificate Date</label>
+            <input id="certDateNonJlpt" type="date" />
+          </div>
+
+          <!-- CEFR level -->
+          <div class="field">
+            <label>CEFR Level <span style="color:var(--text4);font-weight:400;">(as shown on certificate)</span></label>
+            <div class="sel-wrap">
+              <select id="cefrLevel">
+                <option value="A1">A1 — Elementary (7 pts)</option>
+                <option value="A2">A2 — Pre-Intermediate (12 pts)</option>
+                <option value="B1" selected>B1 — Intermediate (15 pts)</option>
+                <option value="B2">B2 — Upper-Intermediate (15 pts, capped)</option>
+                <option value="C1">C1 — Advanced (15 pts, capped)</option>
+                <option value="C2">C2 — Mastery (15 pts, capped)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Proof URL -->
+          <div class="field">
+            <label>Proof / Certificate URL <span style="color:var(--text4);font-weight:400;">(optional)</span></label>
+            <input id="proofUrl" placeholder="https://…" type="url" />
+          </div>
+
+          <button class="btn-submit" onclick="submitEvidence()">Submit for Verification</button>
+          <div id="toast" class="toast"></div>
+          <div class="hint">
+            <span class="hint-icon">i</span>
+            <span>English and English-equivalent tests (IELTS, TOEFL, PTE, Cambridge English) are <strong>not accepted</strong> here — submit those under External Aptitude.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Semester targets -->
+      <div class="card">
+        <div class="card-hd"><span class="card-title">Semester Progression Targets</span></div>
+        <div class="card-body">
+          <div class="sem-targets" id="semTargets"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Reference + Records -->
+    <div class="right-col">
+
+      <!-- Accepted Exams Reference -->
+      <div class="card">
+        <div class="card-hd">
+          <span class="card-title">Accepted Exams &amp; CEFR Mapping</span>
+          <button class="guide-toggle" onclick="toggleGuide()">
+            <span id="guideToggleText">Show guide ▾</span>
+          </button>
+        </div>
+        <div class="guide-content" id="guideContent">
+          <div class="card-body" style="padding-top:14px;">
+
+            <div class="ref-guide">
+              <div class="ref-lang">
+                <div class="ref-lang-name"><span class="ref-lang-flag">🇯🇵</span>Japanese</div>
+                <div class="ref-exam-list">
+                  <div class="ref-exam-row">
+                    <span class="ref-exam-name">JLPT N5</span>
+                    <span class="ref-exam-maps">→ CEFR A1 (7 pts)</span>
+                  </div>
+                  <div class="ref-exam-row">
+                    <span class="ref-exam-name">JLPT N4</span>
+                    <span class="ref-exam-maps">→ CEFR A2 (12 pts)</span>
+                  </div>
+                  <div class="ref-exam-row">
+                    <span class="ref-exam-name">JLPT N3</span>
+                    <span class="ref-exam-maps">score 95–103 → A2 · score 104+ → B1 (15 pts)</span>
+                  </div>
+                  <div class="ref-exam-row">
+                    <span class="ref-exam-name">JLPT N2</span>
+                    <span class="ref-exam-maps">score 90–111 → B1 · score 112+ → B2</span>
+                  </div>
+                  <div class="ref-exam-row">
+                    <span class="ref-exam-name">JLPT N1</span>
+                    <span class="ref-exam-maps">score 100–141 → B2 · score 142+ → C1</span>
+                  </div>
+                </div>
+                <div style="margin-top:8px;font-size:11px;color:var(--text4);">Certs dated Dec 2025+ show CEFR level directly. Older certs: mentor checks score against Central Language Equivalence List.</div>
+              </div>
+
+              <hr class="ref-divider" />
+
+              <div class="ref-lang">
+                <div class="ref-lang-name"><span class="ref-lang-flag">🇩🇪</span>German</div>
+                <div class="ref-exam-list">
+                  <div class="ref-exam-row"><span class="ref-exam-name">Goethe A1</span><span class="ref-exam-maps">→ CEFR A1 (7 pts)</span></div>
+                  <div class="ref-exam-row"><span class="ref-exam-name">Goethe A2</span><span class="ref-exam-maps">→ CEFR A2 (12 pts)</span></div>
+                  <div class="ref-exam-row"><span class="ref-exam-name">Goethe B1</span><span class="ref-exam-maps">→ CEFR B1 (15 pts)</span></div>
+                </div>
+              </div>
+
+              <hr class="ref-divider" />
+
+              <div class="ref-lang">
+                <div class="ref-lang-name"><span class="ref-lang-flag">🇫🇷</span>French</div>
+                <div class="ref-exam-list">
+                  <div class="ref-exam-row"><span class="ref-exam-name">DELF A1</span><span class="ref-exam-maps">→ CEFR A1 (7 pts)</span></div>
+                  <div class="ref-exam-row"><span class="ref-exam-name">DELF A2</span><span class="ref-exam-maps">→ CEFR A2 (12 pts)</span></div>
+                  <div class="ref-exam-row"><span class="ref-exam-name">DELF B1</span><span class="ref-exam-maps">→ CEFR B1 (15 pts)</span></div>
+                  <div class="ref-exam-row"><span class="ref-exam-name">DALF C1/C2</span><span class="ref-exam-maps">→ CEFR C1/C2 (capped at 15)</span></div>
+                </div>
+              </div>
+
+              <hr class="ref-divider" />
+
+              <div class="ref-lang">
+                <div class="ref-lang-name"><span class="ref-lang-flag">🇪🇸</span>Spanish</div>
+                <div class="ref-exam-list">
+                  <div class="ref-exam-row"><span class="ref-exam-name">DELE A1</span><span class="ref-exam-maps">→ CEFR A1 (7 pts)</span></div>
+                  <div class="ref-exam-row"><span class="ref-exam-name">DELE A2</span><span class="ref-exam-maps">→ CEFR A2 (12 pts)</span></div>
+                  <div class="ref-exam-row"><span class="ref-exam-name">DELE B1</span><span class="ref-exam-maps">→ CEFR B1 (15 pts)</span></div>
+                  <div class="ref-exam-row"><span class="ref-exam-name">SIELE</span><span class="ref-exam-maps">→ equivalent CEFR level</span></div>
+                </div>
+              </div>
+
+              <hr class="ref-divider" />
+
+              <div style="font-size:11px;color:var(--text4);line-height:1.6;">
+                <strong style="color:var(--text3);">Other languages</strong> (Mandarin, Korean, Arabic, Hindi, etc.) require a central review and dated equivalence decision before the result maps to CEFR. Submit with proof and await mentor verification.
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- Language breakdown -->
+      <div class="card" id="langBreakdownCard" style="display:none;">
+        <div class="card-hd"><span class="card-title">Language Breakdown</span></div>
+        <div id="langBreakdown" class="lang-grid"></div>
+      </div>
+
+      <!-- Evidence records -->
+      <div class="card">
+        <div class="card-hd">
+          <span class="card-title">My Submissions</span>
+          <span id="rowCount" style="font-size:11px;color:var(--text4);font-weight:600;"></span>
+        </div>
+        <div id="evidenceTable">
+          <div class="empty">
+            <div class="empty-icon">📋</div>
+            <div class="empty-title">No submissions yet</div>
+            <div class="empty-sub">Enter your register number and load records, or submit a new certification.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Log -->
+      <div class="card">
+        <div class="card-hd"><span class="card-title">Activity Log</span></div>
+        <div class="log-wrap" id="logWrap">
+          <div class="log-init">— session started —</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+  // ── Exam catalogue ────────────────────────────────────────────────────────
+  const EXAM_MAP = {
+    Japanese: [
+      { value: 'JLPT', label: 'JLPT (Japanese Language Proficiency Test)', isJlpt: true },
+      { value: 'Other', label: 'Other (central review)' },
+    ],
+    German: [
+      { value: 'Goethe A1', label: 'Goethe-Zertifikat A1' },
+      { value: 'Goethe A2', label: 'Goethe-Zertifikat A2' },
+      { value: 'Goethe B1', label: 'Goethe-Zertifikat B1' },
+      { value: 'Goethe B2', label: 'Goethe-Zertifikat B2' },
+      { value: 'Other', label: 'Other (central review)' },
+    ],
+    French: [
+      { value: 'DELF A1', label: 'DELF A1' },
+      { value: 'DELF A2', label: 'DELF A2' },
+      { value: 'DELF B1', label: 'DELF B1' },
+      { value: 'DELF B2', label: 'DELF B2' },
+      { value: 'DALF C1', label: 'DALF C1' },
+      { value: 'DALF C2', label: 'DALF C2' },
+      { value: 'Other', label: 'Other (central review)' },
+    ],
+    Spanish: [
+      { value: 'DELE A1',  label: 'DELE A1' },
+      { value: 'DELE A2',  label: 'DELE A2' },
+      { value: 'DELE B1',  label: 'DELE B1' },
+      { value: 'DELE B2',  label: 'DELE B2' },
+      { value: 'SIELE',    label: 'SIELE (Servicio Internacional de Evaluación de la Lengua Española)' },
+      { value: 'Other', label: 'Other (central review)' },
+    ],
+  };
+
+  // Auto-select CEFR from exam name for non-JLPT
+  const EXAM_CEFR = {
+    'Goethe A1':'A1','Goethe A2':'A2','Goethe B1':'B1','Goethe B2':'B2',
+    'DELF A1':'A1','DELF A2':'A2','DELF B1':'B1','DELF B2':'B2','DALF C1':'C1','DALF C2':'C2',
+    'DELE A1':'A1','DELE A2':'A2','DELE B1':'B1','DELE B2':'B2',
+  };
+
+  // JLPT score → suggested CEFR
+  function jlptSuggestCefr(level, score) {
+    if (!level) return null;
+    const s = parseInt(score, 10);
+    if (level === 'N5') return 'A1';
+    if (level === 'N4') return 'A2';
+    if (level === 'N3') { if (!isNaN(s)) return s >= 104 ? 'B1' : (s >= 95 ? 'A2' : null); return null; }
+    if (level === 'N2') { if (!isNaN(s)) return s >= 112 ? 'B2' : (s >= 90 ? 'B1' : null);  return null; }
+    if (level === 'N1') { if (!isNaN(s)) return s >= 142 ? 'C1' : (s >= 100 ? 'B2' : null); return null; }
+    return null;
+  }
+
+  // ── Scoring (mirrors service) ──────────────────────────────────────────────
+  const ENGLISH_DISALLOWLIST = new Set([
+    'english','english language','english (efl)','english as a foreign language',
+    'english efl','english esl','ielts','toefl','toefl ibt','toefl pbt',
+    'pte','pte academic','cambridge english','english proficiency','english admission test',
+  ]);
+  const isEnglish = n => ENGLISH_DISALLOWLIST.has(n.toLowerCase().trim());
+  const cefrToMarks = l => ({A1:7,A2:12,B1:15,B2:15,C1:15,C2:15}[l] ?? 0);
+  function calcScore(approved) {
+    if (!approved.length) return 0;
+    const best = new Map();
+    for (const r of approved) {
+      const m = cefrToMarks(r.cefr_level);
+      const k = r.language_name_normalized;
+      if (!best.has(k) || m > best.get(k)) best.set(k, m);
+    }
+    let s = 0; for (const m of best.values()) if (m > s) s = m; return s;
+  }
+
+  // ── Semester options ───────────────────────────────────────────────────────
+  const SEMESTER_TARGETS = [
+    { sem: 1, label: 'S1', target: 'Choose your language' },
+    { sem: 2, label: 'S2', target: 'Achieve CEFR A1 (7 pts)' },
+    { sem: 3, label: 'S3', target: 'Achieve CEFR A2 (12 pts)' },
+    { sem: 4, label: 'S4', target: 'Progress toward B1' },
+    { sem: 5, label: 'S5', target: 'Continue B1 preparation' },
+    { sem: 6, label: 'S6', target: 'Achieve B1 or B2+ (15 pts)' },
+  ];
+
+  (function buildSemesters() {
+    const sel = document.getElementById('semSelect');
+    const now = new Date(), yr = now.getFullYear();
+    const isOdd = now.getMonth() >= 6;
+    const current = `${yr}-${isOdd ? 'Odd' : 'Even'}`;
+    for (let y = yr - 2; y <= yr + 1; y++) {
+      ['Odd','Even'].forEach(h => {
+        const v = `${y}-${h}`;
+        const opt = document.createElement('option');
+        opt.value = v; opt.textContent = v;
+        if (v === current) opt.selected = true;
+        sel.appendChild(opt);
+      });
+    }
+  })();
+
+  // Semester targets (S1–S6 curriculum)
+  (function buildTargets() {
+    const wrap = document.getElementById('semTargets');
+    SEMESTER_TARGETS.forEach(t => {
+      const div = document.createElement('div');
+      div.className = 'sem-row';
+      div.innerHTML = `<span class="sem-badge">${t.label}</span><span class="sem-target">${t.target}</span>`;
+      wrap.appendChild(div);
+    });
+  })();
+
+  // ── Restore saved register number ──────────────────────────────────────────
+  const savedReg = localStorage.getItem('fl_reg_number');
+  if (savedReg) document.getElementById('regNum').value = savedReg;
+  function saveReg() { localStorage.setItem('fl_reg_number', document.getElementById('regNum').value.trim()); }
+
+  // ── Language / exam selection logic ───────────────────────────────────────
+  function onLanguageChange() {
+    const lang = document.getElementById('langSelect').value;
+    const otherField = document.getElementById('otherLangField');
+    const certSel = document.getElementById('certBodySelect');
+    const certHint = document.getElementById('certBodyHint');
+
+    otherField.style.display = lang === 'other' ? '' : 'none';
+    document.getElementById('jlptSection').style.display = 'none';
+    document.getElementById('certDateNonJlptField').style.display = 'none';
+    certHint.textContent = '';
+
+    certSel.innerHTML = '<option value="">— Select exam —</option>';
+
+    const exams = EXAM_MAP[lang];
+    if (exams) {
+      exams.forEach(e => {
+        const opt = document.createElement('option');
+        opt.value = e.value; opt.textContent = e.label;
+        certSel.appendChild(opt);
+      });
+    } else if (lang && lang !== 'other') {
+      const opt = document.createElement('option');
+      opt.value = 'Other'; opt.textContent = 'Other (central review required)';
+      certSel.appendChild(opt);
+      certHint.textContent = 'This language requires a central review. Submit with proof and a mentor will verify.';
+      certHint.className = 'field-hint warn';
+      document.getElementById('certDateNonJlptField').style.display = '';
+    } else if (lang === 'other') {
+      const opt = document.createElement('option');
+      opt.value = 'Other'; opt.textContent = 'Other (central review required)';
+      certSel.appendChild(opt);
+      certHint.textContent = 'Other languages require central review.';
+      certHint.className = 'field-hint warn';
+      document.getElementById('certDateNonJlptField').style.display = '';
+    }
+  }
+
+  function onExamChange() {
+    const exam = document.getElementById('certBodySelect').value;
+    const isJlpt = exam === 'JLPT';
+    document.getElementById('jlptSection').style.display = isJlpt ? '' : 'none';
+    document.getElementById('certDateNonJlptField').style.display = (!isJlpt && exam) ? '' : 'none';
+
+    // Auto-set CEFR for known exams
+    if (EXAM_CEFR[exam]) {
+      document.getElementById('cefrLevel').value = EXAM_CEFR[exam];
+    }
+  }
+
+  function onJlptChange() {
+    const level = document.getElementById('jlptLevel').value;
+    const score = document.getElementById('jlptScore').value;
+    const dateVal = document.getElementById('certDate').value;
+    const suggestEl = document.getElementById('jlptSuggest');
+
+    // Check if cert is Dec 2025 or later (shows CEFR directly)
+    const isNewCert = dateVal && new Date(dateVal) >= new Date('2025-12-01');
+
+    let suggestText = '';
+    const suggested = jlptSuggestCefr(level, score);
+
+    if (isNewCert) {
+      suggestText = 'Certificate dated Dec 2025 or later — CEFR level shown directly on document. Set the CEFR field to match what is printed on your certificate.';
+    } else if (suggested) {
+      suggestText = `Score ${score || '?'} with ${level} → suggested CEFR: <strong>${suggested}</strong>. Mentor will confirm against Central Language Equivalence List.`;
+      document.getElementById('cefrLevel').value = suggested;
+    } else if (level) {
+      suggestText = level === 'N5' ? 'JLPT N5 → CEFR A1 (7 pts)' :
+                    level === 'N4' ? 'JLPT N4 → CEFR A2 (12 pts)' :
+                    `Enter your score to see the CEFR suggestion for ${level}.`;
+      if (level === 'N5') { document.getElementById('cefrLevel').value = 'A1'; suggestText = 'JLPT N5 → CEFR <strong>A1</strong> (7 pts).'; }
+      if (level === 'N4') { document.getElementById('cefrLevel').value = 'A2'; suggestText = 'JLPT N4 → CEFR <strong>A2</strong> (12 pts).'; }
+    }
+
+    if (suggestText) {
+      suggestEl.innerHTML = suggestText;
+      suggestEl.style.display = '';
+    } else {
+      suggestEl.style.display = 'none';
+    }
+  }
+
+  // ── Guide toggle ──────────────────────────────────────────────────────────
+  function toggleGuide() {
+    const c = document.getElementById('guideContent');
+    const t = document.getElementById('guideToggleText');
+    const open = c.classList.toggle('open');
+    t.textContent = open ? 'Hide guide ▴' : 'Show guide ▾';
+  }
+
+  // ── Load records ──────────────────────────────────────────────────────────
+  async function loadRecords() {
+    const reg = document.getElementById('regNum').value.trim();
+    const sem = document.getElementById('semSelect').value;
+    if (!reg) { showErr('Please enter your register number before loading records.'); return; }
+    hideErr();
+    try {
+      const res = await fetch(`/api/evidence/language?register_number=${encodeURIComponent(reg)}&semester=${encodeURIComponent(sem)}`);
+      if (!res.ok) { const j = await res.json(); showErr(j.error || 'Failed to load records.'); return; }
+      const { data, score } = await res.json();
+      renderAll(data, score);
+      addLog(`Loaded ${data.length} record(s) for ${reg} / ${sem}`, 'info');
+    } catch {
+      showErr('Unable to connect to the server. Ensure the server is running.');
+    }
+  }
+
+  // ── Submit evidence ───────────────────────────────────────────────────────
+  async function submitEvidence() {
+    const reg  = document.getElementById('regNum').value.trim();
+    const sem  = document.getElementById('semSelect').value;
+    const langSel  = document.getElementById('langSelect').value;
+    const langName = langSel === 'other'
+      ? document.getElementById('otherLangName').value.trim()
+      : langSel;
+    const cefr = document.getElementById('cefrLevel').value;
+    const examVal  = document.getElementById('certBodySelect').value;
+    const isJlpt   = examVal === 'JLPT';
+    const jlptLvl  = isJlpt ? document.getElementById('jlptLevel').value : null;
+    const jlptScr  = isJlpt ? document.getElementById('jlptScore').value : null;
+    const certDate = isJlpt
+      ? document.getElementById('certDate').value
+      : document.getElementById('certDateNonJlpt').value;
+    const proofUrl = document.getElementById('proofUrl').value.trim();
+
+    if (!reg)  { showErr('Enter your register number first.'); return; }
+    if (!langName) { showToast('Please select a language.', false); return; }
+    if (isEnglish(langName)) { showToast(`"${langName}" is not accepted here — submit under External Aptitude.`, false); addLog(`Rejected: "${langName}" (English variant)`, 'err'); return; }
+    if (!examVal)  { showToast('Please select a certifying body / exam.', false); return; }
+
+    try {
+      const res = await fetch('/api/evidence/language', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          register_number: reg,
+          semester: sem,
+          language_name: langName,
+          cefr_level: cefr,
+          certifying_body: examVal,
+          jlpt_level: jlptLvl || undefined,
+          jlpt_score: jlptScr ? parseInt(jlptScr, 10) : undefined,
+          cert_date: certDate || undefined,
+          proof_url: proofUrl || undefined,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) { showToast(json.error || 'Submission failed.', false); return; }
+      showToast(`${langName} ${cefr} (${examVal}) submitted — pending verification.`, true);
+      addLog(`Submitted <strong>${langName} ${cefr}</strong> via ${examVal} — awaiting mentor review`, 'info');
+      document.getElementById('certBodySelect').selectedIndex = 0;
+      document.getElementById('proofUrl').value = '';
+      hideErr();
+      await loadRecords();
+    } catch {
+      showErr('Unable to connect to the server.');
+    }
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+  let _lastScore = -1;
+
+  function renderAll(rows, score) {
+    if (score !== _lastScore) { animateScore(_lastScore < 0 ? 0 : _lastScore, score); _lastScore = score; }
+
+    ['cr-a1','cr-a2','cr-b1','cr-b2'].forEach(id => document.getElementById(id)?.classList.remove('active'));
+    if (score >= 15) document.getElementById('cr-b1')?.classList.add('active');
+    else if (score >= 12) document.getElementById('cr-a2')?.classList.add('active');
+    else if (score >= 7)  document.getElementById('cr-a1')?.classList.add('active');
+
+    const approved = rows.filter(r => r.status === 'APPROVED');
+    const best = new Map();
+    for (const r of approved) {
+      const m = cefrToMarks(r.cefr_level);
+      if (!best.has(r.language_name_normalized) || m > best.get(r.language_name_normalized)?.marks)
+        best.set(r.language_name_normalized, { marks: m, cefr: r.cefr_level, name: r.language_name });
+    }
+    const bc = document.getElementById('langBreakdownCard');
+    const bd = document.getElementById('langBreakdown');
+    if (best.size > 0) {
+      bc.style.display = '';
+      bd.innerHTML = [...best.values()].map(v => {
+        const isBest = v.marks === score;
+        return `<div class="lang-card${isBest?' best':''}">
+          ${isBest ? '<span class="lc-crown">👑</span>' : ''}
+          <div class="lc-name">${v.name}</div>
+          <div class="lc-cefr">${v.cefr}</div>
+          <div class="lc-pts">${v.marks}<span class="lc-pts-lbl"> pts</span></div>
+        </div>`;
+      }).join('');
+    } else { bc.style.display = 'none'; }
+
+    document.getElementById('rowCount').textContent = rows.length ? `${rows.length} record${rows.length > 1 ? 's' : ''}` : '';
+
+    if (!rows.length) {
+      document.getElementById('evidenceTable').innerHTML = `
+        <div class="empty"><div class="empty-icon">📋</div>
+          <div class="empty-title">No submissions found</div>
+          <div class="empty-sub">Submit a certification using the form.</div></div>`;
+      return;
+    }
+
+    const tbody = rows.map(r => {
+      const m = cefrToMarks(r.cefr_level);
+      const isW = r.status === 'APPROVED' && best.get(r.language_name_normalized)?.marks === m && m === score;
+      const mCell = r.status === 'APPROVED'
+        ? `<span class="marks-cell${isW ? ' win' : ''}">${m}</span>`
+        : `<span class="marks-cell">—</span>`;
+      const jlptTag = r.jlpt_level
+        ? `<span class="jlpt-tag">${r.jlpt_level}${r.jlpt_score ? ' · ' + r.jlpt_score : ''}</span>`
+        : '';
+      const proofLink = r.proof_url
+        ? `<a href="${r.proof_url}" target="_blank" style="font-size:11px;color:var(--blue);">View →</a>`
+        : '<span style="color:var(--text4)">—</span>';
+      return `<tr>
+        <td class="td-lang">${r.language_name}</td>
+        <td><span class="cefr-chip">${r.cefr_level}</span></td>
+        <td>${r.certifying_body || '<span style="color:var(--text4)">—</span>'}${jlptTag}</td>
+        <td>${proofLink}</td>
+        <td><span class="sbadge ${r.status.toLowerCase()}">${r.status}</span></td>
+        <td>${mCell}</td>
+        <td style="font-size:11px;color:var(--text4);font-family:var(--mono);">${fmtDate(r.submitted_at)}</td>
+      </tr>`;
+    }).join('');
+
+    document.getElementById('evidenceTable').innerHTML = `
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Language</th><th>CEFR</th><th>Exam</th><th>Proof</th>
+            <th>Status</th><th>Marks</th><th>Submitted</th>
+          </tr></thead>
+          <tbody>${tbody}</tbody>
+        </table>
+      </div>
+      <div class="table-note">★ winning row · score = <strong>MAX</strong> across languages, not SUM</div>`;
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  function fmtDate(iso) {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' });
+  }
+  function animateScore(from, to) {
+    const c = 283, arc = document.getElementById('ringArc'), num = document.getElementById('scoreNum');
+    const dur = 650, t0 = performance.now();
+    (function step(now) {
+      const t = Math.min((now - t0) / dur, 1), e = 1 - Math.pow(1 - t, 3), cur = from + (to - from) * e;
+      arc.style.strokeDashoffset = c - (cur / 15) * c; num.textContent = Math.round(cur);
+      if (t < 1) requestAnimationFrame(step);
+      else { arc.style.strokeDashoffset = c - (to / 15) * c; num.textContent = to; }
+    })(t0);
+  }
+  let _tt;
+  function showToast(msg, ok) {
+    const el = document.getElementById('toast');
+    el.textContent = msg; el.className = `toast show ${ok ? 'ok' : 'err'}`;
+    clearTimeout(_tt); _tt = setTimeout(() => { el.className = 'toast'; }, 4500);
+  }
+  function showErr(msg) { const el = document.getElementById('errBanner'); el.textContent = msg; el.classList.add('show'); }
+  function hideErr() { document.getElementById('errBanner').classList.remove('show'); }
+  function addLog(msg, type) {
+    const w = document.getElementById('logWrap');
+    const e = document.createElement('div');
+    e.className = `log-entry ${type || ''}`;
+    e.innerHTML = `<span class="log-time">${new Date().toLocaleTimeString()}</span><span class="log-msg">${msg}</span>`;
+    w.insertBefore(e, w.firstChild);
+  }
+
+  if (savedReg) loadRecords();
+</script>
+</body>
+</html>

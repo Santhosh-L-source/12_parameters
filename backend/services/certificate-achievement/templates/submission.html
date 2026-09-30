@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Submission {{ sub.id }} — CertVerify</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"/>
+</head>
+<body>
+<nav class="navbar">
+  <a href="{{ url_for('index') }}" class="nav-brand">CertVerify</a>
+  {% if mentor_view %}
+    <a href="{{ url_for('mentor_dashboard') }}" class="btn-nav">Back to Dashboard</a>
+  {% endif %}
+</nav>
+
+<div class="page-wrap">
+  <div class="page-header">
+    <h1>Submission Report</h1>
+    <p>ID: <code>{{ sub.id }}</code> &nbsp;|&nbsp; Submitted: {{ sub.submitted_at }}</p>
+    {% if mentor_view and sub.has_file %}
+    <div style="margin-top:.75rem;display:flex;gap:.75rem;justify-content:center;flex-wrap:wrap">
+      <a href="{{ url_for('mentor_view_file', sub_id=sub.id) }}"
+         target="_blank" class="btn-view-cert">
+        📄 View Certificate
+      </a>
+      <a href="{{ url_for('mentor_view_file', sub_id=sub.id) }}"
+         download="{{ sub.cert_filename }}" class="btn-download-cert">
+        ⬇ Download
+      </a>
+    </div>
+    {% elif mentor_view %}
+    <p style="color:#e53935;margin-top:.5rem;font-size:.85rem">
+      Certificate file not available on server.
+    </p>
+    {% endif %}
+  </div>
+
+  <!-- Auto status banner -->
+  <div class="status-banner
+    {% if sub.final_status == 'ELIGIBLE' %}pass
+    {% elif 'MENTOR' in sub.final_status %}mentor
+    {% else %}fail{% endif %}">
+    {% if sub.final_status == 'ELIGIBLE' %}✔ ELIGIBLE — {{ sub.marks_awarded }} marks awarded
+    {% elif 'MENTOR' in sub.final_status %}⚠ MENTOR REVIEW REQUIRED
+    {% else %}✘ NOT ELIGIBLE{% endif %}
+  </div>
+
+  <div class="report-grid">
+
+    <!-- Student info -->
+    <div class="rpt-card">
+      <div class="rpt-card-title">Student Details</div>
+      <table>
+        <tr><td class="rc-label">Name</td><td>{{ sub.student_name }}</td></tr>
+        <tr><td class="rc-label">Roll No.</td><td>{{ sub.roll_number }}</td></tr>
+        <tr><td class="rc-label">Semester</td><td>{{ sub.semester }}</td></tr>
+        <tr><td class="rc-label">Department</td><td>{{ sub.department }}</td></tr>
+        {% if sub.email %}<tr><td class="rc-label">Email</td><td>{{ sub.email }}</td></tr>{% endif %}
+        <tr><td class="rc-label">Certificate file</td><td>{{ sub.cert_filename }}</td></tr>
+      </table>
+    </div>
+
+    <!-- Verification steps -->
+    {% set steps = sub.verification_json %}
+
+    {% set mx = steps.get('matrix', {}) %}
+    <div class="rpt-card">
+      <div class="rpt-card-title">Step 1 — Matrix Check</div>
+      <table>
+        <tr><td class="rc-label">Found</td>
+            <td><span class="badge {{ 'pass' if mx.get('found') else 'fail' }}">{{ 'YES' if mx.get('found') else 'NO' }}</span></td></tr>
+        <tr><td class="rc-label">Matched entry</td><td>{{ mx.get('matched_entry') or '—' }}</td></tr>
+        <tr><td class="rc-label">Level</td><td>{{ mx.get('detected_level') or '—' }}</td></tr>
+        <tr><td class="rc-label">Detail</td><td>{{ mx.get('reason') or '—' }}</td></tr>
+      </table>
+    </div>
+
+    {% set nm = steps.get('name_match', {}) %}
+    <div class="rpt-card">
+      <div class="rpt-card-title">Step 2 — Name Verification</div>
+      <table>
+        <tr><td class="rc-label">Name on cert</td><td>{{ nm.get('cert_name') or '—' }}</td></tr>
+        <tr><td class="rc-label">Registered name</td><td>{{ sub.student_name }}</td></tr>
+        <tr><td class="rc-label">Result</td>
+            <td><span class="badge {{ 'pass' if nm.get('match') else 'fail' }}">{{ 'MATCH' if nm.get('match') else 'MISMATCH' }}</span></td></tr>
+        <tr><td class="rc-label">Detail</td><td>{{ nm.get('reason') or '—' }}</td></tr>
+      </table>
+    </div>
+
+    {% set uv = steps.get('url_verification', {}) %}
+    <div class="rpt-card">
+      <div class="rpt-card-title">Step 3 — QR / URL Verification</div>
+      <table>
+        {% if uv.get('present') == false or uv.get('status') == 'NOT PRESENT' %}
+        <tr><td colspan="2"><span class="badge neutral">NOT PRESENT</span></td></tr>
+        {% else %}
+        <tr><td class="rc-label">QR / URL</td>
+            <td style="word-break:break-all">
+              <a href="{{ uv.get('url','#') }}" target="_blank" class="link-external">{{ uv.get('url','—') }}</a>
+            </td></tr>
+        {% if uv.get('pdf_url') %}
+        <tr><td class="rc-label">Certificate PDF</td>
+            <td style="word-break:break-all">
+              <a href="{{ uv.get('pdf_url') }}" target="_blank" class="link-external">
+                Open fetched certificate &rarr;
+              </a>
+            </td></tr>
+        {% endif %}
+        <tr><td class="rc-label">Page holder name</td><td>{{ uv.get('page_holder') or '—' }}</td></tr>
+        <tr><td class="rc-label">Page credential</td><td>{{ uv.get('page_credential') or '—' }}</td></tr>
+        <tr><td class="rc-label">Domain safe</td>
+            <td><span class="badge {{ 'pass' if uv.get('domain_safe') else 'fail' }}">{{ 'YES' if uv.get('domain_safe') else 'NO' }}</span></td></tr>
+        <tr><td class="rc-label">Fields matched</td>
+            <td><span class="badge {{ 'pass' if uv.get('fields_matched') else 'fail' }}">{{ 'YES' if uv.get('fields_matched') else 'NO' }}</span></td></tr>
+        <tr><td class="rc-label">Status</td>
+            <td><span class="badge {{ 'pass' if uv.get('status')=='PASSED' else 'fail' }}">{{ uv.get('status','—') }}</span></td></tr>
+        <tr><td class="rc-label">Detail</td><td>{{ uv.get('reason','—') }}</td></tr>
+        {% endif %}
+      </table>
+    </div>
+
+    {% set mk = steps.get('marks', {}) %}
+    <div class="rpt-card">
+      <div class="rpt-card-title">Step 4 — Marks</div>
+      <table>
+        <tr><td class="rc-label">Tier</td><td>{{ mk.get('tier','—') }}</td></tr>
+        <tr><td class="rc-label">Marks awarded</td><td><strong class="big-num">{{ mk.get('awarded',0) }}</strong></td></tr>
+        <tr><td class="rc-label">Detail</td><td>{{ mk.get('reason','—') }}</td></tr>
+      </table>
+    </div>
+
+    <!-- Reasons -->
+    {% if sub.mentor_reasons %}
+    <div class="rpt-card">
+      <div class="rpt-card-title">Failure Reasons</div>
+      <ul class="reason-list">
+        {% for r in sub.mentor_reasons %}{% if r %}
+        <li>{{ r }}</li>
+        {% endif %}{% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <!-- Mentor actions needed -->
+    {% if sub.mentor_actions and sub.mentor_actions | reject('equalto','') | list %}
+    <div class="rpt-card mentor-card">
+      <div class="rpt-card-title">Mentor Actions Required</div>
+      <ul class="reason-list">
+        {% for a in sub.mentor_actions %}{% if a %}
+        <li>&#9888; {{ a }}</li>
+        {% endif %}{% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <!-- Mentor decision -->
+    <div class="rpt-card {% if sub.mentor_decision == 'APPROVED' %}pass-card{% elif sub.mentor_decision == 'REJECTED' %}fail-card{% endif %}">
+      <div class="rpt-card-title">Mentor Decision</div>
+      {% if sub.mentor_decision in ('APPROVED','REJECTED') %}
+        <table>
+          <tr><td class="rc-label">Decision</td>
+              <td><span class="badge {{ 'pass' if sub.mentor_decision == 'APPROVED' else 'fail' }}">{{ sub.mentor_decision }}</span></td></tr>
+          <tr><td class="rc-label">Comment</td><td>{{ sub.mentor_comment or '—' }}</td></tr>
+          <tr><td class="rc-label">Reviewed at</td><td>{{ sub.mentor_reviewed_at }}</td></tr>
+        </table>
+      {% elif sub.mentor_decision == 'PENDING' %}
+        <p class="pending-note">Awaiting mentor review.</p>
+        {% if mentor_view %}
+        <form method="POST" action="{{ url_for('mentor_review', sub_id=sub.id) }}" class="mentor-form">
+          <div class="field">
+            <label>Comment / Reason</label>
+            <textarea name="comment" rows="3" placeholder="Enter your review comment…"></textarea>
+          </div>
+          <div class="mentor-btns">
+            <button type="submit" name="decision" value="APPROVED" class="btn-approve">✔ Approve</button>
+            <button type="submit" name="decision" value="REJECTED" class="btn-reject">✘ Reject</button>
+          </div>
+        </form>
+        {% endif %}
+      {% else %}
+        <p style="color:#888">Auto-verified — no mentor action required.</p>
+      {% endif %}
+    </div>
+
+  </div><!-- report-grid -->
+</div><!-- page-wrap -->
+</body>
+</html>

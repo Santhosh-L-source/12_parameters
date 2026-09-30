@@ -1,0 +1,253 @@
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #f5f5f7;
+}
+
+.login-header {
+  padding: 20px 40px;
+  background: white;
+  border-bottom: 1px solid #e5e5e5;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 20px;
+  font-weight: 600;
+  color: #1d1d1f;
+}
+
+.logo-icon {
+  font-size: 24px;
+  color: #5856d6;
+}
+
+.logo-text {
+  color: #5856d6;
+  font-weight: 500;
+}
+
+.portal-links {
+  display: flex;
+  gap: 24px;
+  font-size: 15px;
+}
+
+.portal-link {
+  color: #86868b;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: color 0.2s;
+}
+
+.portal-link:hover {
+  color: #1d1d1f;
+}
+
+.portal-link.admin {
+  color: #ff3b30;
+}
+
+.portal-link.admin:hover {
+  color: #c7281e;
+}
+
+.main-content {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+}
+
+.login-card {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  padding: 48px;
+  width: 100%;
+  max-width: 440px;
+}
+
+.welcome-text {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.welcome-text h1 {
+  font-size: 28px;
+  font-weight: 600;
+  color: #1d1d1f;
+  margin-bottom: 8px;
+}
+
+.welcome-text p {
+  color: #86868b;
+  font-size: 15px;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.login-card .form-group label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: #1d1d1f;
+  margin-bottom: 8px;
+}
+
+.login-card .form-group input {
+  width: 100%;
+  padding: 12px 16px;
+  font-size: 15px;
+  border: 1px solid #d2d2d7;
+  border-radius: 8px;
+  outline: none;
+  transition: all 0.2s;
+  background: #ffffff !important;
+  color: #1d1d1f !important;
+  box-sizing: border-box;
+}
+
+.login-card .form-group input:focus {
+  border-color: #5856d6 !important;
+  box-shadow: 0 0 0 3px rgba(88, 86, 214, 0.15) !important;
+}
+
+.login-card .form-group input::placeholder {
+  color: #94a3b8 !important;
+  opacity: 1;
+}
+
+.login-card .form-group input:disabled {
+  background: #f5f5f7 !important;
+  cursor: not-allowed;
+}
+
+.login-btn {
+  width: 100%;
+  padding: 14px;
+  font-size: 16px;
+  font-weight: 600;
+  color: white;
+  background: #5856d6;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  margin-top: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: background 0.2s;
+}
+
+.login-btn:hover {
+  background: #4644c7;
+}
+
+.login-btn:active {
+  background: #3936b8;
+}
+
+.login-btn:disabled {
+  background: #d2d2d7;
+  cursor: not-allowed;
+}
+
+.success-message {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 2px 4px rgba(16, 185, 129, 0.08);
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+.success-message::before {
+  content: '✅';
+  font-size: 16px;
+}
+
+.error-message {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.08);
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+.error-message::before {
+  content: '⚠️';
+  font-size: 16px;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.role-switcher {
+  display: flex;
+  background: #f1f5f9;
+  padding: 4px;
+  border-radius: 8px;
+  margin-bottom: 24px;
+  gap: 4px;
+}
+
+.role-tab {
+  flex: 1;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.role-tab.active {
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.portal-links button.portal-link {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.portal-links button.portal-link.active {
+  color: #2563eb;
+  font-weight: 700;
+}

@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Certificate Verification — Student Portal</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"/>
+</head>
+<body>
+<nav class="navbar">
+  <span class="nav-brand">CertVerify</span>
+  <div class="nav-links">
+    <a href="{{ url_for('my_submissions') }}">My Submissions</a>
+    <a href="{{ url_for('mentor_login') }}" class="btn-nav">Mentor Login</a>
+  </div>
+</nav>
+
+<div class="page-wrap">
+  <div class="page-header">
+    <h1>Certificate Submission &amp; Verification</h1>
+    <p>Submit your industry or NPTEL certificate for marks verification</p>
+  </div>
+
+  <!-- Marking guide strip -->
+  <div class="marks-strip">
+    <div class="ms-item"><span class="ms-label">NPTEL Completed</span><span class="ms-val">3 marks</span></div>
+    <div class="ms-item"><span class="ms-label">NPTEL Elite</span><span class="ms-val">5 marks</span></div>
+    <div class="ms-item"><span class="ms-label">NPTEL Silver</span><span class="ms-val">10 marks</span></div>
+    <div class="ms-item"><span class="ms-label">NPTEL Gold</span><span class="ms-val">15 marks</span></div>
+    <div class="ms-sep"></div>
+    <div class="ms-item"><span class="ms-label">Foundation</span><span class="ms-val">5 marks</span></div>
+    <div class="ms-item"><span class="ms-label">Associate</span><span class="ms-val">10 marks</span></div>
+    <div class="ms-item"><span class="ms-label">Professional</span><span class="ms-val">15 marks</span></div>
+    <div class="ms-item ms-cap"><span class="ms-label">Max Total</span><span class="ms-val">20 marks</span></div>
+  </div>
+
+  <div class="form-card">
+    <form id="verifyForm" enctype="multipart/form-data" novalidate>
+
+      <h2 class="section-title">Student Details</h2>
+      <div class="form-grid">
+        <div class="field">
+          <label>Full Name <span class="req">*</span></label>
+          <input type="text" name="student_name" id="student_name"
+                 placeholder="Exactly as in official records" required/>
+          <small class="hint">Must match the name on the certificate exactly</small>
+        </div>
+        <div class="field">
+          <label>Roll Number <span class="req">*</span></label>
+          <input type="text" name="roll_number" id="roll_number"
+                 placeholder="e.g. 22CS001" required/>
+        </div>
+        <div class="field">
+          <label>Semester <span class="req">*</span></label>
+          <select name="semester" id="semester" required>
+            <option value="">-- Select --</option>
+            {% for s in semesters %}
+            <option value="{{ s }}">Semester {{ s }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label>Department <span class="req">*</span></label>
+          <select name="department" id="department" required>
+            <option value="">-- Select --</option>
+            {% for d in departments %}
+            <option value="{{ d }}">{{ d }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field full">
+          <label>Email Address <span class="opt">(optional)</span></label>
+          <input type="email" name="email" id="email" placeholder="you@college.edu"/>
+        </div>
+      </div>
+
+      <h2 class="section-title" style="margin-top:1.8rem">Upload Certificate</h2>
+      <div class="drop-zone" id="dropZone">
+        <div class="drop-icon">📄</div>
+        <p><strong>Drag &amp; drop</strong> or <label for="certFile" class="browse-link">browse</label></p>
+        <p class="hint">PNG · JPG · JPEG · WEBP · PDF — max 16 MB</p>
+        <input type="file" id="certFile" name="certificate"
+               accept=".png,.jpg,.jpeg,.webp,.pdf" hidden required/>
+      </div>
+      <p id="fileName" class="file-name"></p>
+
+      <div class="form-actions">
+        <button type="submit" id="submitBtn" class="btn-primary">Verify Certificate</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Spinner -->
+  <div id="spinner" class="spinner hidden">
+    <div class="spin-ring"></div>
+    <p>Verifying certificate — please wait…</p>
+  </div>
+
+  <!-- Result -->
+  <div id="resultCard" class="result-card hidden">
+    <div id="statusBanner" class="status-banner"></div>
+    <div id="reportBody"></div>
+    <div id="linkRow" class="link-row hidden"></div>
+  </div>
+</div><!-- page-wrap -->
+
+<script>
+const form       = document.getElementById('verifyForm');
+const dropZone   = document.getElementById('dropZone');
+const certFile   = document.getElementById('certFile');
+const fileNameEl = document.getElementById('fileName');
+const spinner    = document.getElementById('spinner');
+const resultCard = document.getElementById('resultCard');
+const statusBan  = document.getElementById('statusBanner');
+const reportBody = document.getElementById('reportBody');
+const linkRow    = document.getElementById('linkRow');
+const submitBtn  = document.getElementById('submitBtn');
+
+// Drop zone
+dropZone.addEventListener('click', () => certFile.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', ()  => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f) { certFile.files = e.dataTransfer.files; fileNameEl.textContent = f.name; }
+});
+certFile.addEventListener('change', () => { fileNameEl.textContent = certFile.files[0]?.name || ''; });
+
+// Submit
+form.addEventListener('submit', async e => {
+  e.preventDefault();
+  if (!certFile.files[0]) { alert('Please select a certificate file.'); return; }
+  const fd = new FormData(form);
+  spinner.classList.remove('hidden');
+  resultCard.classList.add('hidden');
+  submitBtn.disabled = true;
+  try {
+    const res  = await fetch('/verify', { method: 'POST', body: fd });
+    const data = await res.json();
+    renderResult(data);
+  } catch { renderError('Network error — please try again.'); }
+  finally   { spinner.classList.add('hidden'); submitBtn.disabled = false; }
+});
+
+function renderResult(data) {
+  if (data.error) { renderError(data.error); return; }
+  const status = data.final_status || 'UNKNOWN';
+  statusBan.className = 'status-banner ' + statusCls(status);
+  statusBan.textContent = statusLabel(status);
+
+  const steps = data.steps || {};
+  const m  = steps.matrix        || {};
+  const n  = steps.name_match    || {};
+  const u  = steps.url_verification || {};
+  const mk = steps.marks         || {};
+
+  let html = '<div class="report-grid">';
+
+  // Student info
+  html += card('Student', [
+    ['Name',       esc(data.student_name)],
+    ['Roll No.',   esc(data.roll_number)],
+    ['Semester',   'Semester ' + esc(data.semester)],
+    ['Department', esc(data.department)],
+    ['File',       esc(data.cert_filename)],
+  ]);
+
+  // Step 1 Matrix
+  html += card('Step 1 — Matrix Check', [
+    ['Found in approved list', badge(m.found, m.found ? 'YES' : 'NO')],
+    ['Matched credential', esc(m.matched_entry || '—')],
+    ['Detected level', esc(m.detected_level || '—')],
+    ['Detail', esc(m.reason || '—')],
+  ]);
+
+  // Step 2 Name
+  html += card('Step 2 — Name Verification', [
+    ['Name on certificate', esc(n.cert_name || '—')],
+    ['Registered name', esc(n.registered_name || data.student_name)],
+    ['Result', badge(n.match, n.match ? 'MATCH' : 'MISMATCH')],
+    ['Detail', esc(n.reason || '—')],
+  ]);
+
+  // Step 3 URL/QR
+  const urlPresent = u.present !== false;
+  if (urlPresent) {
+    const urlLink = u.url ? `<a href="${esc(u.url)}" target="_blank" class="link-external">${esc(u.url)}</a>` : '—';
+    const pdfLink = u.pdf_url
+      ? `<a href="${esc(u.pdf_url)}" target="_blank" class="link-external">Open fetched certificate &rarr;</a>`
+      : null;
+    const urlRows = [
+      ['QR / URL', urlLink],
+      ...(pdfLink ? [['Certificate PDF', pdfLink]] : []),
+      ['Page holder name', esc(u.page_holder || '—')],
+      ['Page credential',  esc(u.page_credential || '—')],
+      ['Domain safe', badge(u.domain_safe, u.domain_safe ? 'YES' : 'NO')],
+      ['Page fetched', badge(u.fetched, u.fetched ? 'YES' : 'NO')],
+      ['Fields matched', badge(u.fields_matched, u.fields_matched ? 'YES' : 'NO')],
+      ['Status', statusBadge(u.status)],
+      ['Detail', esc(u.reason || '—')],
+    ];
+    html += card('Step 3 — QR / URL Verification', urlRows);
+  } else {
+    html += card('Step 3 — QR / URL Verification', [
+      ['Result', '<span class="badge neutral">NOT PRESENT</span>'],
+    ]);
+  }
+
+  // Step 4 Marks
+  html += card('Step 4 — Marks', [
+    ['Tier', esc(mk.tier || '—')],
+    ['Marks awarded', '<strong class="big-num">' + (mk.awarded ?? 0) + '</strong>'],
+    ['Session total', '<strong class="big-num">' + (data.running_total ?? 0) + ' / 20</strong>'],
+    ['Detail', esc(mk.reason || '—')],
+  ]);
+
+  // Reasons / Mentor actions
+  if (data.reason?.filter(Boolean).length) {
+    html += card('Summary', data.reason.filter(Boolean).map(r => ['', esc(r)]));
+  }
+  if (data.mentor_action?.filter(Boolean).length) {
+    const rows = data.mentor_action.filter(Boolean).map(a =>
+      ['', '<span class="mentor-note">&#9888; ' + esc(a) + '</span>']
+    );
+    html += card('Mentor Action Required', rows, 'mentor-card');
+  }
+
+  html += '</div>';
+  reportBody.innerHTML = html;
+
+  // Link to full submission
+  if (data.submission_id) {
+    linkRow.innerHTML = `<a class="btn-secondary" href="/status/${esc(data.submission_id)}" target="_blank">View Full Submission Report</a>`;
+    linkRow.classList.remove('hidden');
+  }
+
+  resultCard.classList.remove('hidden');
+  resultCard.scrollIntoView({ behavior: 'smooth' });
+}
+
+function renderError(msg) {
+  statusBan.className = 'status-banner fail';
+  statusBan.textContent = 'ERROR';
+  reportBody.innerHTML = `<p class="error-msg">${esc(msg)}</p>`;
+  resultCard.classList.remove('hidden');
+}
+
+function card(title, rows, extra='') {
+  let h = `<div class="rpt-card ${extra}"><div class="rpt-card-title">${esc(title)}</div><table>`;
+  rows.forEach(([l, v]) => {
+    h += `<tr><td class="rc-label">${esc(l)}</td><td>${v}</td></tr>`;
+  });
+  return h + '</table></div>';
+}
+
+function esc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function badge(ok, text) { return `<span class="badge ${ok?'pass':'fail'}">${esc(text)}</span>`; }
+function statusBadge(s) {
+  const cls = s==='PASSED'?'pass': s==='NOT PRESENT'?'neutral':'fail';
+  return `<span class="badge ${cls}">${esc(s||'—')}</span>`;
+}
+function statusCls(s) {
+  if (s==='ELIGIBLE') return 'pass';
+  if (s==='NOT ELIGIBLE') return 'fail';
+  if (s.includes('MENTOR')) return 'mentor';
+  return 'neutral';
+}
+function statusLabel(s) {
+  if (s==='ELIGIBLE') return '✔ ELIGIBLE';
+  if (s.includes('MENTOR')) return '⚠ MENTOR REVIEW REQUIRED';
+  if (s==='NOT ELIGIBLE') return '✘ NOT ELIGIBLE';
+  return s;
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,1143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Module 12 — GATE & Higher Studies</title>
+  <style>
+    :root {
+      --primary: #4F46E5;
+      --primary-hover: #4338CA;
+      --primary-light: #EEF2FF;
+      --primary-border: #C7D2FE;
+      --success: #059669;
+      --success-light: #ECFDF5;
+      --success-border: #6EE7B7;
+      --warning: #D97706;
+      --warning-light: #FFFBEB;
+      --warning-border: #FDE68A;
+      --danger: #DC2626;
+      --danger-light: #FEF2F2;
+      --danger-border: #FECACA;
+      --gold: #F59E0B;
+      --gold-light: #FFFBEB;
+      --gray-50: #F9FAFB;
+      --gray-100: #F3F4F6;
+      --gray-200: #E5E7EB;
+      --gray-300: #D1D5DB;
+      --gray-400: #9CA3AF;
+      --gray-500: #6B7280;
+      --gray-700: #374151;
+      --gray-900: #111827;
+      --radius: 10px;
+      --shadow-sm: 0 1px 2px rgba(0,0,0,.06);
+      --shadow: 0 1px 3px rgba(0,0,0,.1), 0 1px 2px rgba(0,0,0,.06);
+      --shadow-md: 0 4px 6px -1px rgba(0,0,0,.1);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--gray-50); color: var(--gray-900); min-height: 100vh; }
+
+    /* ── Header ─────────────────────────────────────────────────────── */
+    .header { background: white; border-bottom: 1px solid var(--gray-200); height: 60px; padding: 0 32px; display: flex; align-items: center; gap: 14px; position: sticky; top: 0; z-index: 100; box-shadow: var(--shadow-sm); }
+    .header-badge { background: var(--primary); color: white; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; letter-spacing: .5px; flex-shrink: 0; }
+    .header-title { font-size: 17px; font-weight: 700; }
+    .header-sub { font-size: 12px; color: var(--gray-400); }
+    .header-cap { margin-left: auto; background: var(--gold-light); border: 1px solid var(--warning-border); color: var(--warning); font-size: 12px; font-weight: 700; padding: 4px 14px; border-radius: 20px; flex-shrink: 0; }
+
+    /* ── Layout ─────────────────────────────────────────────────────── */
+    .container { max-width: 1120px; margin: 0 auto; padding: 32px 24px; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    .three-two { display: grid; grid-template-columns: 3fr 2fr; gap: 24px; }
+    @media (max-width: 800px) { .two-col, .three-two { grid-template-columns: 1fr; } }
+
+    /* ── Tabs ───────────────────────────────────────────────────────── */
+    .tabs { display: flex; gap: 4px; background: var(--gray-100); border-radius: var(--radius); padding: 4px; margin-bottom: 28px; width: fit-content; }
+    .tab-btn { padding: 8px 22px; border: none; background: transparent; border-radius: 7px; font-size: 14px; font-weight: 500; color: var(--gray-500); cursor: pointer; transition: all .15s; white-space: nowrap; }
+    .tab-btn:hover { color: var(--gray-700); }
+    .tab-btn.active { background: white; color: var(--primary); font-weight: 600; box-shadow: var(--shadow); }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* ── Cards ──────────────────────────────────────────────────────── */
+    .card { background: white; border-radius: var(--radius); border: 1px solid var(--gray-200); box-shadow: var(--shadow); overflow: hidden; }
+    .card + .card { margin-top: 20px; }
+    .card-header { padding: 18px 24px; border-bottom: 1px solid var(--gray-100); }
+    .card-header h2 { font-size: 15px; font-weight: 600; }
+    .card-header p { font-size: 13px; color: var(--gray-500); margin-top: 3px; }
+    .card-header-row { display: flex; align-items: center; gap: 12px; }
+    .card-body { padding: 24px; }
+
+    /* ── Form elements ──────────────────────────────────────────────── */
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .form-grid.g1 { grid-template-columns: 1fr; }
+    .form-grid.g3 { grid-template-columns: 1fr 1fr 1fr; }
+    @media (max-width: 600px) { .form-grid, .form-grid.g3 { grid-template-columns: 1fr; } }
+    .full { grid-column: 1 / -1; }
+
+    .field { display: flex; flex-direction: column; gap: 6px; }
+    label { font-size: 13px; font-weight: 500; color: var(--gray-700); }
+    .req { color: var(--danger); }
+    .hint { font-size: 11px; color: var(--gray-400); font-weight: 400; }
+
+    input[type="text"], input[type="number"], input[type="date"], input[type="url"], select {
+      padding: 9px 12px; border: 1px solid var(--gray-300); border-radius: 8px;
+      font-size: 14px; color: var(--gray-900); background: white; width: 100%;
+      transition: border-color .15s, box-shadow .15s; outline: none;
+    }
+    input:focus, select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(79,70,229,.12); }
+    input:disabled { background: var(--gray-50); color: var(--gray-400); }
+
+    .check-item { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+    .check-item input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--primary); cursor: pointer; flex-shrink: 0; }
+    .check-item span { font-size: 13px; font-weight: 500; color: var(--gray-700); }
+
+    .section-label { font-size: 11px; font-weight: 700; color: var(--gray-400); text-transform: uppercase; letter-spacing: .6px; grid-column: 1 / -1; padding-bottom: 6px; border-bottom: 1px solid var(--gray-100); }
+
+    /* Conditional blocks */
+    .cond-block { grid-column: 1 / -1; padding: 16px; background: var(--primary-light); border: 1px solid var(--primary-border); border-radius: 8px; }
+    .cond-block .cond-title { font-size: 11px; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 14px; }
+
+    /* ── Buttons ────────────────────────────────────────────────────── */
+    .btn { padding: 9px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; transition: all .15s; display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
+    .btn-success { background: var(--success); color: white; }
+    .btn-success:hover:not(:disabled) { background: #047857; }
+    .btn-danger { background: var(--danger); color: white; }
+    .btn-danger:hover:not(:disabled) { background: #B91C1C; }
+    .btn-outline { background: white; color: var(--gray-700); border: 1px solid var(--gray-300); }
+    .btn-outline:hover:not(:disabled) { background: var(--gray-50); border-color: var(--gray-400); }
+    .btn-sm { padding: 6px 14px; font-size: 13px; }
+    .btn-row { display: flex; gap: 10px; align-items: center; margin-top: 24px; flex-wrap: wrap; }
+
+    /* ── Alerts ─────────────────────────────────────────────────────── */
+    .alert { padding: 13px 16px; border-radius: 8px; font-size: 13px; display: flex; align-items: flex-start; gap: 10px; }
+    .alert + .alert, .card + .alert { margin-top: 14px; }
+    .alert-body strong { display: block; font-weight: 600; margin-bottom: 2px; }
+    .alert-success { background: var(--success-light); border: 1px solid var(--success-border); color: #065F46; }
+    .alert-warning  { background: var(--warning-light);  border: 1px solid var(--warning-border);  color: #92400E; }
+    .alert-danger   { background: var(--danger-light);   border: 1px solid var(--danger-border);   color: #991B1B; }
+    .alert-info     { background: var(--primary-light);  border: 1px solid var(--primary-border);  color: #3730A3; }
+    .alert-icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+
+    /* ── Status badge ────────────────────────────────────────────────── */
+    .badge { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; letter-spacing: .3px; }
+    .badge-pending  { background: #FEF3C7; color: #92400E; }
+    .badge-approved { background: #D1FAE5; color: #065F46; }
+    .badge-rejected { background: #FEE2E2; color: #991B1B; }
+
+    /* ── Detail table ────────────────────────────────────────────────── */
+    .detail-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .detail-table td { padding: 8px 12px; border-bottom: 1px solid var(--gray-100); vertical-align: top; }
+    .detail-table td:first-child { color: var(--gray-500); font-weight: 500; width: 48%; white-space: nowrap; }
+    .detail-table td:last-child { color: var(--gray-900); font-weight: 500; word-break: break-all; }
+
+    /* ── Data table (calibration) ────────────────────────────────────── */
+    .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .data-table th { background: var(--gray-50); color: var(--gray-500); font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: .5px; padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--gray-200); white-space: nowrap; }
+    .data-table td { padding: 11px 14px; border-bottom: 1px solid var(--gray-100); color: var(--gray-700); }
+    .data-table tr:hover td { background: var(--gray-50); }
+    .mono { font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace; font-weight: 700; }
+
+    /* ── Score card ──────────────────────────────────────────────────── */
+    .score-card { background: white; border: 1px solid var(--gray-200); border-radius: var(--radius); overflow: hidden; }
+    .score-hero { background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); color: white; padding: 22px 24px; }
+    .score-hero h3 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; opacity: .75; margin-bottom: 8px; }
+    .score-final-num { font-size: 52px; font-weight: 800; line-height: 1; }
+    .score-final-num sup { font-size: 20px; opacity: .6; font-weight: 400; vertical-align: super; }
+    .score-hero-bar { margin-top: 14px; height: 6px; background: rgba(255,255,255,.25); border-radius: 99px; overflow: hidden; }
+    .score-hero-fill { height: 100%; background: rgba(255,255,255,.85); border-radius: 99px; transition: width .8s cubic-bezier(.4,0,.2,1); }
+
+    .score-rows { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--gray-100); border-top: 1px solid var(--gray-100); }
+    .score-cell { background: white; padding: 14px 18px; }
+    .score-cell .lbl { font-size: 11px; font-weight: 600; color: var(--gray-400); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+    .score-cell .val { font-size: 22px; font-weight: 700; color: var(--primary); }
+    .score-cell .val.gold { color: var(--warning); }
+    .score-cell .sub { font-size: 11px; color: var(--gray-400); margin-top: 2px; }
+
+    /* ── Progress bar ────────────────────────────────────────────────── */
+    .progress { margin-top: 10px; }
+    .progress-row { display: flex; justify-content: space-between; font-size: 11px; color: var(--gray-400); margin-bottom: 5px; }
+    .progress-track { background: var(--gray-100); border-radius: 99px; height: 7px; overflow: hidden; }
+    .progress-fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--primary), #7C3AED); transition: width .8s cubic-bezier(.4,0,.2,1); }
+    .progress-fill.gold { background: linear-gradient(90deg, var(--gold), #D97706); }
+
+    /* ── Tier ladder ─────────────────────────────────────────────────── */
+    .tier-ladder { padding: 18px 24px; border-top: 1px solid var(--gray-100); }
+    .tier-ladder h4 { font-size: 11px; font-weight: 700; color: var(--gray-400); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 10px; }
+    .tier-row { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 7px; margin-bottom: 3px; }
+    .tier-row.awarded { background: var(--primary-light); border: 1px solid var(--primary-border); }
+    .tier-row.awarded.is-gold { background: var(--gold-light); border-color: var(--warning-border); }
+    .tier-row.met { /* lower tiers that were surpassed */ }
+    .tier-dot { width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--gray-300); flex-shrink: 0; }
+    .tier-row.awarded .tier-dot { background: var(--primary); border-color: var(--primary); }
+    .tier-row.awarded.is-gold .tier-dot { background: var(--gold); border-color: var(--gold); }
+    .tier-row.met .tier-dot { background: var(--gray-300); border-color: var(--gray-300); }
+    .tier-num { font-size: 14px; font-weight: 700; color: var(--gray-300); width: 24px; text-align: right; flex-shrink: 0; }
+    .tier-row.awarded .tier-num { color: var(--primary); }
+    .tier-row.awarded.is-gold .tier-num { color: var(--warning); }
+    .tier-row.met .tier-num { color: var(--gray-400); }
+    .tier-desc { font-size: 12px; color: var(--gray-400); flex: 1; }
+    .tier-row.awarded .tier-desc { color: var(--gray-700); font-weight: 500; }
+    .tier-row.met .tier-desc { color: var(--gray-500); }
+    .tier-tag { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 20px; text-transform: uppercase; letter-spacing: .4px; flex-shrink: 0; }
+    .tier-row.awarded .tier-tag { background: var(--primary); color: white; }
+    .tier-row.awarded.is-gold .tier-tag { background: var(--gold); color: white; }
+
+    /* ── Score preview (student) ─────────────────────────────────────── */
+    #score-preview { margin-top: 16px; }
+
+    /* ── Lookup row ──────────────────────────────────────────────────── */
+    .lookup-row { display: flex; gap: 10px; align-items: flex-end; }
+    .lookup-row .field { flex: 1; }
+
+    /* ── Empty state ─────────────────────────────────────────────────── */
+    .empty { text-align: center; padding: 48px 24px; color: var(--gray-400); }
+    .empty-icon { font-size: 36px; margin-bottom: 10px; }
+    .empty p { font-size: 13px; }
+
+    /* ── Spinner ─────────────────────────────────────────────────────── */
+    .spin { width: 15px; height: 15px; border: 2px solid rgba(255,255,255,.4); border-top-color: white; border-radius: 50%; animation: spin .7s linear infinite; display: inline-block; }
+    .spin.dark { border-color: rgba(0,0,0,.15); border-top-color: var(--gray-700); }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .hidden { display: none !important; }
+
+    /* ── Info banner ─────────────────────────────────────────────────── */
+    .info-banner { background: var(--primary-light); border: 1px solid var(--primary-border); border-radius: 8px; padding: 12px 16px; font-size: 13px; color: #3730A3; margin-bottom: 20px; line-height: 1.6; }
+    .info-banner strong { font-weight: 700; }
+    .info-banner .steps { margin-top: 6px; padding-left: 16px; }
+    .info-banner .steps li { margin-bottom: 2px; }
+  </style>
+</head>
+<body>
+
+<!-- ─── Header ──────────────────────────────────────────────────────────── -->
+<header class="header">
+  <span class="header-badge">M12</span>
+  <div>
+    <div class="header-title">GATE &amp; Higher Studies</div>
+    <div class="header-sub">Placement Readiness Platform</div>
+  </div>
+  <span class="header-cap">MAX 25 marks</span>
+</header>
+
+<main class="container">
+
+  <!-- ─── Tab bar ─────────────────────────────────────────────────────── -->
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="student"  onclick="switchTab(this)">Student</button>
+    <button class="tab-btn"        data-tab="mentor"   onclick="switchTab(this)">Mentor Review</button>
+    <button class="tab-btn"        data-tab="admin"    onclick="switchTab(this)">Admin / Calibration</button>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════
+       STUDENT TAB
+       ═══════════════════════════════════════════════════════════════════ -->
+  <div id="tab-student" class="tab-panel active">
+    <div class="info-banner">
+      <strong>How it works:</strong>
+      <ol class="steps">
+        <li>Fill in your preparation details and any official GATE / optional exam info below.</li>
+        <li>Use <strong>Preview Tier</strong> to see an instant estimate before submitting.</li>
+        <li>Submit — a mentor will verify your proof and trigger final scoring.</li>
+      </ol>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2>Submit GATE Evidence</h2>
+        <p>All submissions stay PENDING until a mentor approves them. No marks are awarded on submission alone.</p>
+      </div>
+      <div class="card-body">
+        <form id="evidence-form" onsubmit="submitEvidence(event)">
+
+          <!-- Identity -->
+          <div class="form-grid">
+            <div class="section-label">Student Identity</div>
+            <div class="field">
+              <label>Register Number <span class="req">*</span></label>
+              <input type="number" id="s-studentId" placeholder="e.g. 312425148020" min="1" required>
+            </div>
+            <div class="field">
+              <label>Current Semester <span class="req">*</span></label>
+              <select id="s-semesterId" required>
+                <option value="">— Select —</option>
+                <option value="1">Semester 1</option>
+                <option value="2">Semester 2</option>
+                <option value="3">Semester 3</option>
+                <option value="4">Semester 4</option>
+                <option value="5">Semester 5</option>
+                <option value="6">Semester 6</option>
+                <option value="7">Semester 7</option>
+                <option value="8">Semester 8</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Branch Name <span class="req">*</span></label>
+              <select id="s-branchCode" required>
+                <option value="">— Select Branch —</option>
+                <option value="CSE">Computer Science Engineering</option>
+                <option value="IT">Information Technology</option>
+                <option value="AIML">AI &amp; Machine Learning</option>
+                <option value="DS">Data Science</option>
+                <option value="ECE">Electronics &amp; Communication Engineering</option>
+                <option value="EE">Electrical Engineering</option>
+                <option value="ME">Mechanical Engineering</option>
+                <option value="CE">Civil Engineering</option>
+                <option value="CHE">Chemical Engineering</option>
+                <option value="BT">Biotechnology</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Practice / Mock Tests -->
+          <div class="form-grid" style="margin-top:22px">
+            <div class="section-label">Preparation Evidence — Mock &amp; Practice Tests</div>
+            <div class="field">
+              <label>Total Tests Completed</label>
+              <input type="number" id="s-testsCompleted" value="0" min="0" oninput="updatePreview()">
+            </div>
+            <div class="field">
+              <label>Full-Length Tests <span class="hint">(subset of above)</span></label>
+              <input type="number" id="s-fullLengthTests" value="0" min="0" oninput="updatePreview()">
+            </div>
+            <div class="field">
+              <label>Average Score <span class="hint">(%)</span></label>
+              <input type="number" id="s-avgScore" value="0" min="0" max="100" step="0.01" oninput="updatePreview()">
+            </div>
+            <div class="field" style="justify-content:flex-end;padding-bottom:4px">
+              <label class="check-item">
+                <input type="checkbox" id="s-diagnosticCompleted" onchange="updatePreview()">
+                <span>Approved GATE diagnostic completed</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Official GATE -->
+          <div class="form-grid" style="margin-top:22px">
+            <div class="section-label">Official GATE Examination</div>
+            <div class="full">
+              <label class="check-item">
+                <input type="checkbox" id="s-officialAppearance" onchange="toggleGateSection(); updatePreview()">
+                <span>I officially appeared for the GATE exam (sat the exam)</span>
+              </label>
+            </div>
+
+            <div id="gate-section" class="cond-block hidden">
+              <div class="cond-title">Official GATE Details</div>
+              <div class="form-grid g3">
+                <div class="field full" style="grid-column:auto">
+                  <label class="check-item">
+                    <input type="checkbox" id="s-qualified" onchange="updatePreview()">
+                    <span>Qualified (cleared cutoff)</span>
+                  </label>
+                </div>
+                <div class="field full" style="grid-column:auto">
+                  <label>GATE Score <span class="hint">(if qualified)</span></label>
+                  <input type="number" id="s-gateScore" placeholder="e.g. 523" min="0" max="1000" oninput="updatePreview()">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Optional exam -->
+          <div class="form-grid" style="margin-top:22px">
+            <div class="section-label">Optional Higher-Studies Exam <span class="hint">(Bonus marks — only if core &ge; 5)</span></div>
+            <div class="field">
+              <label>Exam Type</label>
+              <select id="s-optionalExamType" onchange="toggleOptionalSection(); updatePreview()">
+                <option value="">— None —</option>
+                <optgroup label="Aptitude  (+3 bonus)">
+                  <option value="GRE">GRE</option>
+                  <option value="GMAT">GMAT</option>
+                  <option value="CAT">CAT</option>
+                </optgroup>
+                <optgroup label="Language Proficiency  (+5 bonus)">
+                  <option value="TOEFL">TOEFL</option>
+                  <option value="IELTS">IELTS</option>
+                  <option value="PTE">PTE</option>
+                </optgroup>
+              </select>
+            </div>
+
+            <div id="optional-section" class="cond-block hidden" style="grid-column:auto">
+              <div class="cond-title" id="optional-section-title">Optional Exam Details</div>
+              <div style="display:flex;flex-direction:column;gap:10px">
+                <label class="check-item">
+                  <input type="checkbox" id="s-scorecardValid" onchange="updatePreview()">
+                  <span>Scorecard is valid &amp; attached</span>
+                </label>
+                <label class="check-item" id="central-row" style="display:none">
+                  <input type="checkbox" id="s-centralThresholdMet" onchange="updatePreview()">
+                  <span>Meets Central Team published threshold</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Proof -->
+          <div class="form-grid" style="margin-top:22px">
+            <div class="section-label">Proof Attachment</div>
+            <div class="field full">
+              <label>Upload Scorecard / Marksheet <span class="hint">(PDF, JPG, PNG — optional)</span></label>
+              <input type="file" id="s-proofFile" accept=".pdf,.jpg,.jpeg,.png" style="padding:7px 10px;border:1px solid var(--gray-300);border-radius:8px;font-size:13px;background:white;cursor:pointer;">
+              <div id="upload-status" style="font-size:12px;margin-top:5px;color:var(--gray-500)"></div>
+            </div>
+          </div>
+
+          <div class="btn-row">
+            <button type="submit" class="btn btn-primary" id="submit-btn">Submit Evidence</button>
+            <button type="button" class="btn btn-outline" onclick="previewTier()">Preview Tier</button>
+            <button type="button" class="btn btn-outline" onclick="resetStudentForm()">Reset</button>
+          </div>
+        </form>
+
+        <div id="score-preview"></div>
+        <div id="submit-result"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════
+       MENTOR TAB
+       ═══════════════════════════════════════════════════════════════════ -->
+  <div id="tab-mentor" class="tab-panel">
+    <div class="info-banner">
+      <strong>Mentor workflow:</strong> Load a PENDING evidence record by ID, verify the attached proof matches what the student entered, then Approve or Reject. Scoring runs automatically on Approve.
+    </div>
+
+    <div class="two-col">
+      <!-- Left column: lookup + decision -->
+      <div>
+        <div class="card">
+          <div class="card-header"><h2>Look Up Evidence Record</h2></div>
+          <div class="card-body">
+            <div class="lookup-row">
+              <div class="field">
+                <label>Register Number</label>
+                <input type="number" id="m-registerNumber" placeholder="e.g. 312425148020" min="1"
+                       onkeydown="if(event.key==='Enter'){loadEvidence();}">
+              </div>
+              <button class="btn btn-outline" id="load-btn" onclick="loadEvidence()">Load</button>
+            </div>
+            <div id="evidence-detail" class="hidden" style="margin-top:18px">
+              <table class="detail-table" id="evidence-table"></table>
+            </div>
+            <div id="load-result"></div>
+          </div>
+        </div>
+
+        <div class="card hidden" id="verify-card">
+          <div class="card-header">
+            <h2>Mentor Decision</h2>
+            <p>Approve to run scoring; Reject to dismiss without marks.</p>
+          </div>
+          <div class="card-body">
+            <div class="field">
+              <label>Mentor ID <span class="req">*</span></label>
+              <input type="number" id="m-mentorId" placeholder="Your user ID" min="1">
+            </div>
+            <div class="btn-row">
+              <button class="btn btn-success" onclick="verifyEvidence('APPROVE')">&#10003; Approve</button>
+              <button class="btn btn-danger"  onclick="verifyEvidence('REJECT')">&#10007; Reject</button>
+            </div>
+            <div id="verify-result"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right column: score breakdown -->
+      <div style="align-self:start" id="score-panel-wrap">
+        <div class="empty" style="padding:60px 0;color:var(--gray-300)">
+          <div class="empty-icon">&#128202;</div>
+          <p>Score breakdown will appear here after approval</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════
+       ADMIN / CALIBRATION TAB
+       ═══════════════════════════════════════════════════════════════════ -->
+  <div id="tab-admin" class="tab-panel">
+    <div class="info-banner">
+      <strong>Branch Calibration</strong> — reviewed periodically by the Central Team. These thresholds determine which GATE score earns the top tier (25 marks). The scoring service reads from this table; nothing is hardcoded.
+    </div>
+
+    <div class="three-two">
+      <!-- Table -->
+      <div>
+        <div class="card">
+          <div class="card-header">
+            <div class="card-header-row">
+              <div style="flex:1">
+                <h2>Calibration Entries</h2>
+                <p>All active and historical branch thresholds.</p>
+              </div>
+              <input type="text" id="a-filterBranch" placeholder="Filter branch…"
+                     style="width:120px;padding:7px 10px;font-size:13px"
+                     oninput="loadCalibrations()">
+              <button class="btn btn-outline btn-sm" onclick="loadCalibrations()">Refresh</button>
+            </div>
+          </div>
+          <div id="calib-table-wrap" style="overflow-x:auto">
+            <div class="empty">
+              <div class="empty-icon">&#128203;</div>
+              <p>Click Refresh to load entries</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Form -->
+      <div style="align-self:start">
+        <div class="card">
+          <div class="card-header">
+            <h2 id="calib-form-title">Add Calibration Entry</h2>
+            <p>Set branch score thresholds for a specific date range.</p>
+          </div>
+          <div class="card-body">
+            <form id="calibration-form" onsubmit="saveCalibration(event)">
+              <input type="hidden" id="a-calibId">
+              <div class="form-grid g1">
+                <div class="field">
+                  <label>Branch Code <span class="req">*</span></label>
+                  <input type="text" id="a-branchCode" placeholder="e.g. CSE" required>
+                </div>
+                <div class="field">
+                  <label>Min Qualifying Score <span class="req">*</span></label>
+                  <input type="number" id="a-minQual" placeholder="e.g. 350" required min="0" max="1000">
+                </div>
+                <div class="field">
+                  <label>Min Score for 25 Marks <span class="req">*</span>
+                    <span class="hint">(top tier threshold)</span>
+                  </label>
+                  <input type="number" id="a-minScore25" placeholder="e.g. 500" required min="0" max="1000">
+                </div>
+                <div class="field">
+                  <label>Effective From <span class="req">*</span></label>
+                  <input type="date" id="a-effectiveFrom" required>
+                </div>
+                <div class="field">
+                  <label>Effective To <span class="hint">(leave blank = open-ended)</span></label>
+                  <input type="date" id="a-effectiveTo">
+                </div>
+                <div class="field">
+                  <label>Updated By (Admin ID) <span class="req">*</span></label>
+                  <input type="number" id="a-updatedBy" placeholder="Admin user ID" required min="1">
+                </div>
+              </div>
+              <div class="btn-row">
+                <button type="submit" class="btn btn-primary" id="calib-save-btn">Save Entry</button>
+                <button type="button" class="btn btn-outline" onclick="resetCalibForm()">New Entry</button>
+              </div>
+              <div id="calib-result"></div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- ─── JavaScript ──────────────────────────────────────────────────────────── -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+'use strict';
+
+const API = '/api/gate';
+
+const _sb = supabase.createClient(
+  'https://yigkfeinvzwjhhswdehl.supabase.co',
+  'sb_publishable_VbphLFlIMM9PjDp-oOz9kQ_YBvO2dWV'
+);
+
+async function uploadProofFile(file, studentId) {
+  const statusEl = document.getElementById('upload-status');
+  statusEl.textContent = 'Uploading file…';
+
+  const fileData = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
+  const res = await fetch(`${API}/upload`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fileName: file.name, fileData, studentId }),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || 'Upload failed');
+
+  statusEl.textContent = 'File uploaded successfully.';
+  return json.url;
+}
+
+// ── Tab navigation ────────────────────────────────────────────────────────────
+
+function switchTab(btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  if (btn.dataset.tab === 'admin') loadCalibrations();
+}
+
+// ── Student tab ───────────────────────────────────────────────────────────────
+
+function toggleGateSection() {
+  const on = document.getElementById('s-officialAppearance').checked;
+  document.getElementById('gate-section').classList.toggle('hidden', !on);
+}
+
+function toggleOptionalSection() {
+  const type = document.getElementById('s-optionalExamType').value;
+  const section = document.getElementById('optional-section');
+  const centralRow = document.getElementById('central-row');
+  const titleEl = document.getElementById('optional-section-title');
+  const LANG = ['TOEFL','IELTS','PTE'];
+
+  section.classList.toggle('hidden', !type);
+
+  if (type) {
+    titleEl.textContent = LANG.includes(type)
+      ? `${type} — Language Proficiency (+5 if threshold met)`
+      : `${type} — Aptitude Exam (+3 for valid scorecard)`;
+    centralRow.style.display = LANG.includes(type) ? 'flex' : 'none';
+  }
+}
+
+// Client-side tier calculation (mirrors gateScoringService.js — for instant preview only)
+function clientCalcTier(ev) {
+  const LANG = new Set(['TOEFL','IELTS','PTE']);
+  const APT  = new Set(['GRE','GMAT','CAT']);
+  let tier = 0, reason = 'No conditions met';
+
+  if (ev.officialAppearance && ev.qualified && ev.gateScore != null) {
+    // Cannot verify branch threshold here — show 20 with a note
+    tier = 20;
+    reason = 'Appeared + Qualified — branch threshold check on server';
+  } else if (ev.officialAppearance && ev.qualified) {
+    tier = 20; reason = 'Officially appeared and qualified';
+  } else if (ev.officialAppearance) {
+    tier = 15; reason = 'Officially appeared for GATE';
+  } else if (ev.testsCompleted >= 15 && ev.fullLengthTestsCompleted >= 3 && ev.averageScorePercent >= 55) {
+    tier = 15; reason = '15+ tests / 3 full-length / 55%+ average';
+  } else if (ev.testsCompleted >= 10 && ev.averageScorePercent >= 40) {
+    tier = 10; reason = '10+ tests with 40%+ average score';
+  } else if (ev.testsCompleted >= 5) {
+    tier = 5;  reason = '5+ tests completed';
+  } else if (ev.diagnosticCompleted && ev.testsCompleted >= 3) {
+    tier = 3;  reason = 'Approved diagnostic + 3 tests';
+  }
+
+  let bonus = 0, bonusDesc = '';
+  if (tier >= 5 && ev.optionalExamType && ev.optionalScorecardValid) {
+    if (LANG.has(ev.optionalExamType) && ev.centralThresholdMet) {
+      bonus = 5; bonusDesc = `${ev.optionalExamType} — meets Central threshold`;
+    } else if (APT.has(ev.optionalExamType)) {
+      bonus = 3; bonusDesc = `${ev.optionalExamType} — valid scorecard`;
+    }
+  }
+
+  return { tier, reason, bonus, bonusDesc, finalScore: Math.min(tier + bonus, 25) };
+}
+
+function gatherStudentForm() {
+  return {
+    officialAppearance: document.getElementById('s-officialAppearance').checked,
+    qualified:          document.getElementById('s-qualified').checked,
+    gateScore:          document.getElementById('s-gateScore').value ? +document.getElementById('s-gateScore').value : null,
+    testsCompleted:     +document.getElementById('s-testsCompleted').value || 0,
+    fullLengthTestsCompleted: +document.getElementById('s-fullLengthTests').value || 0,
+    averageScorePercent: +document.getElementById('s-avgScore').value || 0,
+    diagnosticCompleted: document.getElementById('s-diagnosticCompleted').checked,
+    optionalExamType:    document.getElementById('s-optionalExamType').value || null,
+    optionalScorecardValid: document.getElementById('s-scorecardValid').checked,
+    centralThresholdMet: document.getElementById('s-centralThresholdMet').checked,
+  };
+}
+
+function updatePreview() {
+  // live update only if preview is already visible
+  if (!document.getElementById('score-preview').innerHTML) return;
+  previewTier();
+}
+
+function previewTier() {
+  const ev = gatherStudentForm();
+  const { tier, reason, bonus, bonusDesc, finalScore } = clientCalcTier(ev);
+
+  const bonusLine = bonus > 0
+    ? `<br>+ Bonus <strong>+${bonus}</strong> <span style="opacity:.75">(${bonusDesc})</span>`
+    : (ev.optionalExamType
+        ? `<br><span style="opacity:.7">Optional bonus not applied (${tier < 5 ? 'core must be ≥ 5' : 'scorecard/threshold condition not met'})</span>`
+        : '');
+
+  const isCapped = (tier + bonus > 25);
+  const capNote = isCapped ? ' <span style="opacity:.75">(capped at 25)</span>' : '';
+
+  const serverNote = (ev.officialAppearance && ev.qualified && ev.gateScore != null)
+    ? `<span style="display:block;margin-top:6px;font-size:11px;opacity:.7">
+        Branch threshold check happens server-side on mentor approval —
+        this preview shows tier 20. You may earn 25 if your score meets the branch calibration.
+       </span>` : '';
+
+  document.getElementById('score-preview').innerHTML = `
+    <div class="alert alert-info" style="margin-top:16px">
+      <div style="font-size:22px;flex-shrink:0">&#128202;</div>
+      <div>
+        <strong>Estimated Score: ${finalScore} / 25</strong>${capNote}
+        Core tier <strong>${tier}</strong> — ${reason}
+        ${bonusLine}
+        ${serverNote}
+      </div>
+    </div>`;
+}
+
+async function submitEvidence(e) {
+  e.preventDefault();
+  const btn = document.getElementById('submit-btn');
+  const resultEl = document.getElementById('submit-result');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span> Submitting…';
+
+  const ev = gatherStudentForm();
+  const studentId = +document.getElementById('s-studentId').value;
+  const fileInput = document.getElementById('s-proofFile');
+  let proofUrl = null;
+
+  if (fileInput.files && fileInput.files[0]) {
+    try {
+      proofUrl = await uploadProofFile(fileInput.files[0], studentId);
+    } catch (uploadErr) {
+      btn.disabled = false;
+      btn.textContent = 'Submit Evidence';
+      resultEl.innerHTML = `
+        <div class="alert alert-danger" style="margin-top:16px">
+          <div style="font-size:22px;flex-shrink:0">&#10060;</div>
+          <div><strong>Upload Error</strong> ${escHtml(uploadErr.message)}</div>
+        </div>`;
+      return;
+    }
+  }
+
+  const payload = {
+    studentId,
+    semesterId: +document.getElementById('s-semesterId').value,
+    branchCode: document.getElementById('s-branchCode').value.trim().toUpperCase(),
+    ...ev,
+    proofUrl,
+  };
+
+  try {
+    const res = await fetch(API + '/evidence', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Submission failed');
+
+    resultEl.innerHTML = `
+      <div class="alert alert-success" style="margin-top:16px">
+        <div style="font-size:22px;flex-shrink:0">&#9989;</div>
+        <div>
+          <strong>Submitted successfully!</strong>
+          Evidence ID: <strong>#${json.data.id}</strong>
+          &nbsp;<span class="badge badge-pending">PENDING</span>
+          <br><span style="font-size:12px;opacity:.8">A mentor will review your proof. Share this ID with them.</span>
+        </div>
+      </div>`;
+  } catch (err) {
+    resultEl.innerHTML = `
+      <div class="alert alert-danger" style="margin-top:16px">
+        <div style="font-size:22px;flex-shrink:0">&#10060;</div>
+        <div><strong>Error</strong> ${escHtml(err.message)}</div>
+      </div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Submit Evidence';
+  }
+}
+
+function resetStudentForm() {
+  document.getElementById('evidence-form').reset();
+  document.getElementById('gate-section').classList.add('hidden');
+  document.getElementById('optional-section').classList.add('hidden');
+  document.getElementById('score-preview').innerHTML = '';
+  document.getElementById('submit-result').innerHTML = '';
+  document.getElementById('upload-status').textContent = '';
+}
+
+// ── Mentor tab ────────────────────────────────────────────────────────────────
+
+let currentRegisterNumber = null;
+
+async function loadEvidence() {
+  const regNum = document.getElementById('m-registerNumber').value;
+  if (!regNum) return;
+
+  const btn = document.getElementById('load-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin dark"></span>';
+
+  const detailDiv = document.getElementById('evidence-detail');
+  const verifyCard = document.getElementById('verify-card');
+  const loadResult = document.getElementById('load-result');
+
+  try {
+    const res = await fetch(`${API}/evidence/search?registerNumber=${encodeURIComponent(regNum)}`);
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Not found');
+
+    const ev = json.data;
+    currentRegisterNumber = ev.studentId;
+
+    document.getElementById('evidence-table').innerHTML = buildDetailTable(ev);
+    detailDiv.classList.remove('hidden');
+    loadResult.innerHTML = '';
+
+    verifyCard.classList.toggle('hidden', ev.status !== 'PENDING');
+    document.getElementById('verify-result').innerHTML = '';
+
+    if (ev.status === 'APPROVED' && ev.finalScore != null) {
+      renderScorePanel({ coreTier: ev.coreTier, bonus: ev.bonus, finalScore: ev.finalScore, flagMissingCalibration: ev.flagMissingCalibration });
+    } else {
+      document.getElementById('score-panel-wrap').innerHTML = `
+        <div class="empty" style="padding:60px 0;color:var(--gray-300)">
+          <div class="empty-icon">&#128202;</div>
+          <p>Score breakdown will appear here after approval</p>
+        </div>`;
+    }
+  } catch (err) {
+    detailDiv.classList.remove('hidden');
+    document.getElementById('evidence-table').innerHTML =
+      `<tr><td colspan="2" style="color:var(--danger);padding:12px">${escHtml(err.message)}</td></tr>`;
+    verifyCard.classList.add('hidden');
+    loadResult.innerHTML = '';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Load';
+  }
+}
+
+function buildDetailTable(ev) {
+  const bool = v => v
+    ? `<span style="color:var(--success);font-weight:600">Yes</span>`
+    : `<span style="color:var(--gray-300)">No</span>`;
+
+  const statusClass = { PENDING: 'badge-pending', APPROVED: 'badge-approved', REJECTED: 'badge-rejected' };
+
+  const rows = [
+    ['Evidence ID',       `<strong>#${ev.id}</strong>`],
+    ['Status',            `<span class="badge ${statusClass[ev.status]}">${ev.status}</span>`],
+    ['Register Number',   ev.studentId],
+    ['Semester',          ev.semesterId],
+    ['Branch',            `<span class="mono">${ev.branchCode}</span>`],
+    ['Diagnostic done',   bool(ev.diagnosticCompleted)],
+    ['Tests completed',   ev.testsCompleted],
+    ['Full-length tests', ev.fullLengthTestsCompleted],
+    ['Average score',     `${ev.averageScorePercent}%`],
+    ['Official GATE',     bool(ev.officialAppearance)],
+    ['Qualified',         bool(ev.qualified)],
+    ['GATE Score',        ev.gateScore != null ? `<strong>${ev.gateScore}</strong>` : '—'],
+    ['Optional exam',     ev.optionalExamType || '—'],
+    ['Scorecard valid',   bool(ev.optionalScorecardValid)],
+    ['Central threshold', bool(ev.centralThresholdMet)],
+    ['Proof',             ev.proofUrl
+      ? `<a href="${escHtml(ev.proofUrl)}" target="_blank" rel="noreferrer" style="color:var(--primary)">View &#8599;</a>`
+      : '—'],
+  ];
+
+  if (ev.status === 'APPROVED') {
+    rows.push(['Core tier', ev.coreTier], ['Bonus', `+${ev.bonus}`], ['Final score', `<strong>${ev.finalScore} / 25</strong>`]);
+  }
+
+  return rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
+}
+
+async function verifyEvidence(action) {
+  const mentorId = document.getElementById('m-mentorId').value;
+  const resultEl = document.getElementById('verify-result');
+
+  if (!mentorId) {
+    resultEl.innerHTML = `<div class="alert alert-warning" style="margin-top:12px"><div class="alert-body"><strong>Mentor ID required.</strong></div></div>`;
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API}/evidence/by-register/${currentRegisterNumber}/verify`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, mentorId: +mentorId }),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Action failed');
+
+    document.getElementById('verify-card').classList.add('hidden');
+    document.getElementById('evidence-table').innerHTML = buildDetailTable(json.data);
+
+    if (action === 'APPROVE' && json.scoring) {
+      renderScorePanel(json.scoring);
+      resultEl.innerHTML = `
+        <div class="alert alert-success" style="margin-top:12px">
+          <div>&#9989;</div>
+          <div class="alert-body"><strong>Approved &amp; scored.</strong> See breakdown on the right.</div>
+        </div>`;
+    } else {
+      document.getElementById('score-panel-wrap').innerHTML = `
+        <div class="empty" style="padding:60px 0;color:var(--gray-300)">
+          <div class="empty-icon">&#128202;</div><p>No score — evidence rejected</p>
+        </div>`;
+      resultEl.innerHTML = `
+        <div class="alert alert-danger" style="margin-top:12px">
+          <div>&#10060;</div>
+          <div class="alert-body"><strong>Rejected.</strong> No marks awarded.</div>
+        </div>`;
+    }
+  } catch (err) {
+    resultEl.innerHTML = `
+      <div class="alert alert-danger" style="margin-top:12px">
+        <div>&#10060;</div>
+        <div class="alert-body"><strong>Error</strong> ${escHtml(err.message)}</div>
+      </div>`;
+  }
+}
+
+// ── Score panel ───────────────────────────────────────────────────────────────
+
+const TIER_DEFS = [
+  { mark: 25, desc: 'GATE score &ge; branch threshold (qualified)' },
+  { mark: 20, desc: 'Officially appeared + qualified' },
+  { mark: 15, desc: 'Official appearance &nbsp;<em>OR</em>&nbsp; 15 tests / 3 full-length / 55%+ avg' },
+  { mark: 10, desc: '10+ tests with 40%+ average score' },
+  { mark: 5,  desc: '5+ tests completed' },
+  { mark: 3,  desc: 'Approved diagnostic + 3 tests' },
+  { mark: 0,  desc: 'No conditions met' },
+];
+
+function renderScorePanel(scoring) {
+  const { coreTier, bonus, finalScore, flagMissingCalibration } = scoring;
+  const heroPct  = Math.round((finalScore / 25) * 100);
+  const corePct  = Math.round((coreTier  / 25) * 100);
+
+  const calibWarn = flagMissingCalibration ? `
+    <div class="alert alert-warning" style="margin:0 20px 16px">
+      <div style="font-size:16px;flex-shrink:0">&#9888;&#65039;</div>
+      <div class="alert-body">
+        <strong>Missing branch calibration</strong>
+        No active calibration row was found for this branch. The score shown reflects tier 20 (next confirmed tier).
+        An admin must add a calibration entry before the 25-mark tier can be evaluated.
+      </div>
+    </div>` : '';
+
+  const bonusDesc = bonus === 5 ? 'Language exam — Central threshold met'
+                  : bonus === 3 ? 'Aptitude exam — valid scorecard'
+                  : 'No eligible scorecard';
+
+  const tierRows = TIER_DEFS.map(t => {
+    const awarded = t.mark === coreTier;
+    const met     = t.mark < coreTier;
+    const isGold  = awarded && t.mark === 25;
+    const cls     = awarded ? ('awarded' + (isGold ? ' is-gold' : '')) : (met ? 'met' : '');
+    const tag     = awarded ? '<span class="tier-tag">Awarded</span>' : '';
+    return `
+      <div class="tier-row ${cls}">
+        <div class="tier-dot"></div>
+        <div class="tier-num">${t.mark}</div>
+        <div class="tier-desc">${t.desc}</div>
+        ${tag}
+      </div>`;
+  }).join('');
+
+  document.getElementById('score-panel-wrap').innerHTML = `
+    <div class="score-card">
+      <div class="score-hero">
+        <h3>Final Score</h3>
+        <div class="score-final-num">${finalScore}<sup>&thinsp;/ 25</sup></div>
+        <div class="score-hero-bar">
+          <div class="score-hero-fill" id="hero-fill" style="width:0%"></div>
+        </div>
+      </div>
+
+      ${calibWarn}
+
+      <div class="score-rows">
+        <div class="score-cell">
+          <div class="lbl">Core Tier</div>
+          <div class="val">${coreTier}</div>
+          <div class="progress">
+            <div class="progress-row"><span>Core tier</span><span>${coreTier} / 25</span></div>
+            <div class="progress-track"><div class="progress-fill" id="core-fill" style="width:0%"></div></div>
+          </div>
+        </div>
+        <div class="score-cell">
+          <div class="lbl">Bonus</div>
+          <div class="val ${bonus > 0 ? 'gold' : ''}">+${bonus}</div>
+          <div class="sub">${bonusDesc}</div>
+        </div>
+      </div>
+
+      <div class="tier-ladder">
+        <h4>Tier Breakdown — highest match wins</h4>
+        ${tierRows}
+      </div>
+    </div>`;
+
+  // Animate bars after DOM settles
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      const hf = document.getElementById('hero-fill');
+      const cf = document.getElementById('core-fill');
+      if (hf) hf.style.width = heroPct + '%';
+      if (cf) cf.style.width = corePct + '%';
+    });
+  });
+}
+
+// ── Admin / Calibration ───────────────────────────────────────────────────────
+
+let calibCache = {};
+
+async function loadCalibrations() {
+  const branch = (document.getElementById('a-filterBranch').value || '').trim().toUpperCase();
+  const url = `${API}/calibration` + (branch ? `?branchCode=${encodeURIComponent(branch)}` : '');
+  const wrap = document.getElementById('calib-table-wrap');
+  wrap.innerHTML = `<div class="empty" style="padding:40px 0"><span class="spin dark"></span></div>`;
+
+  try {
+    const res = await fetch(url);
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Load failed');
+
+    const rows = json.data;
+    calibCache = {};
+    rows.forEach(r => { calibCache[r.id] = r; });
+
+    if (!rows.length) {
+      wrap.innerHTML = `<div class="empty"><div class="empty-icon">&#128203;</div><p>No calibration entries found.</p></div>`;
+      return;
+    }
+
+    wrap.innerHTML = `
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Branch</th>
+            <th>Min Qualifying</th>
+            <th>Min for 25</th>
+            <th>From</th>
+            <th>To</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(r => `
+            <tr>
+              <td class="mono">${escHtml(r.branchCode)}</td>
+              <td>${r.minQualifyingScore}</td>
+              <td><strong>${r.minScoreFor25Marks}</strong></td>
+              <td>${r.effectiveFrom}</td>
+              <td>${r.effectiveTo || '<span style="color:var(--gray-400)">open</span>'}</td>
+              <td><button class="btn btn-outline btn-sm" onclick="editCalibration(${r.id})">Edit</button></td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+  } catch (err) {
+    wrap.innerHTML = `<div class="empty" style="color:var(--danger)"><div class="empty-icon">&#10060;</div><p>${escHtml(err.message)}</p></div>`;
+  }
+}
+
+function editCalibration(id) {
+  const r = calibCache[id];
+  if (!r) return;
+  document.getElementById('a-calibId').value = r.id;
+  document.getElementById('a-branchCode').value = r.branchCode;
+  document.getElementById('a-minQual').value = r.minQualifyingScore;
+  document.getElementById('a-minScore25').value = r.minScoreFor25Marks;
+  document.getElementById('a-effectiveFrom').value = r.effectiveFrom;
+  document.getElementById('a-effectiveTo').value = r.effectiveTo || '';
+  document.getElementById('a-updatedBy').value = '';
+  document.getElementById('calib-form-title').textContent = `Edit — ${r.branchCode}`;
+  document.getElementById('calib-save-btn').textContent = 'Update Entry';
+  document.getElementById('calib-result').innerHTML = '';
+  document.getElementById('calibration-form').scrollIntoView({ behavior: 'smooth' });
+}
+
+function resetCalibForm() {
+  document.getElementById('calibration-form').reset();
+  document.getElementById('a-calibId').value = '';
+  document.getElementById('calib-form-title').textContent = 'Add Calibration Entry';
+  document.getElementById('calib-save-btn').textContent = 'Save Entry';
+  document.getElementById('calib-result').innerHTML = '';
+}
+
+async function saveCalibration(e) {
+  e.preventDefault();
+  const btn = document.getElementById('calib-save-btn');
+  const resultEl = document.getElementById('calib-result');
+  const editId = document.getElementById('a-calibId').value;
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span> Saving…';
+
+  const payload = {
+    branchCode:         document.getElementById('a-branchCode').value.trim().toUpperCase(),
+    minQualifyingScore: +document.getElementById('a-minQual').value,
+    minScoreFor25Marks: +document.getElementById('a-minScore25').value,
+    effectiveFrom:      document.getElementById('a-effectiveFrom').value,
+    effectiveTo:        document.getElementById('a-effectiveTo').value || null,
+    updatedBy:          +document.getElementById('a-updatedBy').value,
+  };
+
+  try {
+    const res = await fetch(editId ? `${API}/calibration/${editId}` : `${API}/calibration`, {
+      method: editId ? 'PATCH' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Save failed');
+
+    resultEl.innerHTML = `
+      <div class="alert alert-success" style="margin-top:16px">
+        <div>&#9989;</div>
+        <div class="alert-body">
+          <strong>${editId ? 'Updated' : 'Created'} — ${json.data.branchCode}</strong>
+          Min for 25 marks: ${json.data.minScoreFor25Marks}
+        </div>
+      </div>`;
+
+    resetCalibForm();
+    loadCalibrations();
+  } catch (err) {
+    resultEl.innerHTML = `
+      <div class="alert alert-danger" style="margin-top:16px">
+        <div>&#10060;</div>
+        <div class="alert-body"><strong>Error</strong> ${escHtml(err.message)}</div>
+      </div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = editId ? 'Update Entry' : 'Save Entry';
+  }
+}
+
+// ── Utility ───────────────────────────────────────────────────────────────────
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Submission <%= sub.id %> — CertVerify</title>
+  <link rel="stylesheet" href="/static/style.css"/>
+</head>
+<body>
+<nav class="navbar">
+  <a href="/" class="nav-brand">CertVerify</a>
+  <% if (locals.mentor_view) { %>
+    <a href="/mentor" class="btn-nav">Back to Dashboard</a>
+  <% } %>
+</nav>
+
+<div class="page-wrap">
+  <div class="page-header">
+    <h1>Submission Report</h1>
+    <p>ID: <code><%= sub.id %></code> &nbsp;|&nbsp; Submitted: <%= sub.submitted_at %></p>
+    <% if (locals.mentor_view && sub.has_file) { %>
+    <div style="margin-top:.75rem;display:flex;gap:.75rem;justify-content:center;flex-wrap:wrap">
+      <a href="/mentor/file/<%= sub.id %>" target="_blank" class="btn-view-cert">&#128196; View Certificate</a>
+      <a href="/mentor/file/<%= sub.id %>" download="<%= sub.cert_filename %>" class="btn-download-cert">&#11015; Download</a>
+    </div>
+    <% } else if (locals.mentor_view) { %>
+    <p style="color:#e53935;margin-top:.5rem;font-size:.85rem">Certificate file not available on server.</p>
+    <% } %>
+  </div>
+
+  <div class="status-banner <%= sub.final_status === 'ELIGIBLE' ? 'pass' : (sub.final_status || '').includes('MENTOR') ? 'mentor' : 'fail' %>">
+    <% if (sub.final_status === 'ELIGIBLE') { %>
+      &#10004; ELIGIBLE — <%= sub.marks_awarded %> marks awarded
+    <% } else if ((sub.final_status || '').includes('MENTOR')) { %>
+      &#9888; MENTOR REVIEW REQUIRED
+    <% } else { %>
+      &#10008; NOT ELIGIBLE
+    <% } %>
+  </div>
+
+  <div class="report-grid">
+    <div class="rpt-card">
+      <div class="rpt-card-title">Student Details</div>
+      <table>
+        <tr><td class="rc-label">Name</td><td><%= sub.student_name %></td></tr>
+        <tr><td class="rc-label">Roll No.</td><td><%= sub.roll_number %></td></tr>
+        <tr><td class="rc-label">Semester</td><td><%= sub.semester %></td></tr>
+        <tr><td class="rc-label">Department</td><td><%= sub.department %></td></tr>
+        <% if (sub.email) { %><tr><td class="rc-label">Email</td><td><%= sub.email %></td></tr><% } %>
+        <tr><td class="rc-label">Certificate file</td><td><%= sub.cert_filename %></td></tr>
+      </table>
+    </div>
+
+    <% var steps = sub.verification_json || {}; %>
+    <% var mx = steps.matrix || {}; %>
+    <div class="rpt-card">
+      <div class="rpt-card-title">Step 1 — Matrix Check</div>
+      <table>
+        <tr><td class="rc-label">Found</td>
+            <td><span class="badge <%= mx.found ? 'pass' : 'fail' %>"><%= mx.found ? 'YES' : 'NO' %></span></td></tr>
+        <tr><td class="rc-label">Matched entry</td><td><%= mx.matched_entry || '—' %></td></tr>
+        <tr><td class="rc-label">Level</td><td><%= mx.detected_level || '—' %></td></tr>
+        <tr><td class="rc-label">Detail</td><td><%= mx.reason || '—' %></td></tr>
+      </table>
+    </div>
+
+    <% var nm = steps.name_match || {}; %>
+    <div class="rpt-card">
+      <div class="rpt-card-title">Step 2 — Name Verification</div>
+      <table>
+        <tr><td class="rc-label">Name on cert</td><td><%= nm.cert_name || '—' %></td></tr>
+        <tr><td class="rc-label">Registered name</td><td><%= sub.student_name %></td></tr>
+        <tr><td class="rc-label">Result</td>
+            <td><span class="badge <%= nm.match ? 'pass' : 'fail' %>"><%= nm.match ? 'MATCH' : 'MISMATCH' %></span></td></tr>
+        <tr><td class="rc-label">Detail</td><td><%= nm.reason || '—' %></td></tr>
+      </table>
+    </div>
+
+    <% var uv = steps.url_verification || {}; %>
+    <div class="rpt-card">
+      <div class="rpt-card-title">Step 3 — QR / URL Verification</div>
+      <table>
+        <% if (uv.present === false || uv.status === 'NOT PRESENT') { %>
+        <tr><td colspan="2"><span class="badge neutral">NOT PRESENT</span></td></tr>
+        <% } else { %>
+        <tr><td class="rc-label">QR / URL</td>
+            <td style="word-break:break-all"><a href="<%= uv.url || '#' %>" target="_blank" class="link-external"><%= uv.url || '—' %></a></td></tr>
+        <% if (uv.pdf_url) { %>
+        <tr><td class="rc-label">Certificate PDF</td>
+            <td style="word-break:break-all"><a href="<%= uv.pdf_url %>" target="_blank" class="link-external">Open fetched certificate &rarr;</a></td></tr>
+        <% } %>
+        <tr><td class="rc-label">Page holder name</td><td><%= uv.page_holder || '—' %></td></tr>
+        <tr><td class="rc-label">Page credential</td><td><%= uv.page_credential || '—' %></td></tr>
+        <tr><td class="rc-label">Domain safe</td>
+            <td><span class="badge <%= uv.domain_safe ? 'pass' : 'fail' %>"><%= uv.domain_safe ? 'YES' : 'NO' %></span></td></tr>
+        <tr><td class="rc-label">Fields matched</td>
+            <td><span class="badge <%= uv.fields_matched ? 'pass' : 'fail' %>"><%= uv.fields_matched ? 'YES' : 'NO' %></span></td></tr>
+        <tr><td class="rc-label">Status</td>
+            <td><span class="badge <%= uv.status === 'PASSED' ? 'pass' : 'fail' %>"><%= uv.status || '—' %></span></td></tr>
+        <tr><td class="rc-label">Detail</td><td><%= uv.reason || '—' %></td></tr>
+        <% } %>
+      </table>
+    </div>
+
+    <% var mk = steps.marks || {}; %>
+    <div class="rpt-card">
+      <div class="rpt-card-title">Step 4 — Marks</div>
+      <table>
+        <tr><td class="rc-label">Tier</td><td><%= mk.tier || '—' %></td></tr>
+        <tr><td class="rc-label">Marks awarded</td><td><strong class="big-num"><%= mk.awarded || 0 %></strong></td></tr>
+        <tr><td class="rc-label">Detail</td><td><%= mk.reason || '—' %></td></tr>
+      </table>
+    </div>
+
+    <% if (sub.mentor_reasons && sub.mentor_reasons.filter(function(r){return r}).length) { %>
+    <div class="rpt-card">
+      <div class="rpt-card-title">Failure Reasons</div>
+      <ul class="reason-list">
+        <% sub.mentor_reasons.forEach(function(r) { if (r) { %><li><%= r %></li><% } }); %>
+      </ul>
+    </div>
+    <% } %>
+
+    <% var actions = sub.mentor_actions || []; %>
+    <% if (actions.filter(function(a){return a}).length) { %>
+    <div class="rpt-card mentor-card">
+      <div class="rpt-card-title">Mentor Actions Required</div>
+      <ul class="reason-list">
+        <% actions.forEach(function(a) { if (a) { %><li>&#9888; <%= a %></li><% } }); %>
+      </ul>
+    </div>
+    <% } %>
+
+    <div class="rpt-card <%= sub.mentor_decision === 'APPROVED' ? 'pass-card' : sub.mentor_decision === 'REJECTED' ? 'fail-card' : '' %>">
+      <div class="rpt-card-title">Mentor Decision</div>
+      <% if (sub.mentor_decision === 'APPROVED' || sub.mentor_decision === 'REJECTED') { %>
+        <table>
+          <tr><td class="rc-label">Decision</td>
+              <td><span class="badge <%= sub.mentor_decision === 'APPROVED' ? 'pass' : 'fail' %>"><%= sub.mentor_decision %></span></td></tr>
+          <tr><td class="rc-label">Comment</td><td><%= sub.mentor_comment || '—' %></td></tr>
+          <tr><td class="rc-label">Reviewed at</td><td><%= sub.mentor_reviewed_at %></td></tr>
+        </table>
+      <% } else if (sub.mentor_decision === 'PENDING') { %>
+        <p class="pending-note">Awaiting mentor review.</p>
+        <% if (locals.mentor_view) { %>
+        <form method="POST" action="/mentor/review/<%= sub.id %>" class="mentor-form">
+          <div class="field">
+            <label>Comment / Reason</label>
+            <textarea name="comment" rows="3" placeholder="Enter your review comment..."></textarea>
+          </div>
+          <div class="mentor-btns">
+            <button type="submit" name="decision" value="APPROVED" class="btn-approve">&#10004; Approve</button>
+            <button type="submit" name="decision" value="REJECTED" class="btn-reject">&#10008; Reject</button>
+          </div>
+        </form>
+        <% } %>
+      <% } else { %>
+        <p style="color:#888">Auto-verified — no mentor action required.</p>
+      <% } %>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "data": {
+    "matchedUser": {
+      "tagProblemCounts": {
+        "advanced": [
+          { "tagName": "Dynamic Programming", "tagSlug": "dynamic-programming", "problemsSolved": 45 }
+        ],
+        "intermediate": [
+          { "tagName": "Database", "tagSlug": "database", "problemsSolved": 25 }
+        ],
+        "fundamental": [
+          { "tagName": "Array", "tagSlug": "array", "problemsSolved": 120 }
+        ]
+      }
+    }
+  }
+}

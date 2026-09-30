@@ -1,0 +1,33 @@
+{
+  "status": "OK",
+  "result": [
+    {
+      "id": 1001,
+      "contestId": 1900,
+      "problem": { "contestId": 1900, "index": "A", "name": "Cover in Water", "tags": ["brute force"] },
+      "verdict": "OK",
+      "programmingLanguage": "C++17"
+    },
+    {
+      "id": 1002,
+      "contestId": 1900,
+      "problem": { "contestId": 1900, "index": "B", "name": "Collecting Game", "tags": ["greedy"] },
+      "verdict": "OK",
+      "programmingLanguage": "C++17"
+    },
+    {
+      "id": 1003,
+      "contestId": 1900,
+      "problem": { "contestId": 1900, "index": "A", "name": "Cover in Water", "tags": ["brute force"] },
+      "verdict": "OK",
+      "programmingLanguage": "C++17"
+    },
+    {
+      "id": 1004,
+      "contestId": 1899,
+      "problem": { "contestId": 1899, "index": "C", "name": "Problem C", "tags": ["dp"] },
+      "verdict": "WRONG_ANSWER",
+      "programmingLanguage": "C++17"
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<coverage generated="1790327263954" clover="3.2.0">
+  <project timestamp="1790327263954" name="All files">
+    <metrics statements="31" coveredstatements="31" conditionals="42" coveredconditionals="42" methods="3" coveredmethods="3" elements="76" coveredelements="76" complexity="0" loc="31" ncloc="31" packages="1" files="1" classes="1"/>
+    <file name="gateScoringService.js" path="C:\Users\gurup\OneDrive\SBVG\Gate Exam\src\services\gateScoringService.js">
+      <metrics statements="31" coveredstatements="31" conditionals="42" coveredconditionals="42" methods="3" coveredmethods="3"/>
+      <line num="5" count="1" type="stmt"/>
+      <line num="6" count="1" type="stmt"/>
+      <line num="30" count="33" type="stmt"/>
+      <line num="33" count="33" type="cond" truecount="5" falsecount="0"/>
+      <line num="34" count="8" type="cond" truecount="2" falsecount="0"/>
+      <line num="37" count="2" type="stmt"/>
+      <line num="39" count="6" type="cond" truecount="2" falsecount="0"/>
+      <line num="40" count="4" type="stmt"/>
+      <line num="46" count="27" type="cond" truecount="4" falsecount="0"/>
+      <line num="47" count="4" type="stmt"/>
+      <line num="52" count="23" type="cond" truecount="3" falsecount="0"/>
+      <line num="56" count="23" type="cond" truecount="4" falsecount="0"/>
+      <line num="57" count="6" type="stmt"/>
+      <line num="61" count="17" type="cond" truecount="4" falsecount="0"/>
+      <line num="62" count="6" type="stmt"/>
+      <line num="66" count="11" type="cond" truecount="2" falsecount="0"/>
+      <line num="67" count="5" type="stmt"/>
+      <line num="71" count="6" type="cond" truecount="4" falsecount="0"/>
+      <line num="72" count="2" type="stmt"/>
+      <line num="75" count="4" type="stmt"/>
+      <line num="90" count="23" type="cond" truecount="2" falsecount="0"/>
+      <line num="92" count="18" type="stmt"/>
+      <line num="94" count="18" type="cond" truecount="4" falsecount="0"/>
+      <line num="96" count="12" type="cond" truecount="4" falsecount="0"/>
+      <line num="97" count="7" type="cond" truecount="2" falsecount="0"/>
+      <line num="99" count="3" type="stmt"/>
+      <line num="110" count="8" type="stmt"/>
+      <line num="114" count="8" type="stmt"/>
+      <line num="115" count="8" type="stmt"/>
+      <line num="117" count="8" type="stmt"/>
+      <line num="120" count="1" type="stmt"/>
+    </file>
+  </project>
+</coverage>
