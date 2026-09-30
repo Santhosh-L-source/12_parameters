@@ -1,10 +1,16 @@
-const puppeteer = require('puppeteer');
-const config = require('../config/config');
-const logger = require('../utils/logger');
+let puppeteer = null;
+try {
+  puppeteer = require('puppeteer');
+} catch (e) {
+  // puppeteer is optional in serverless environments
+}
 
 let browser = null;
 
 async function getBrowser() {
+  if (!puppeteer) {
+    throw new Error('Puppeteer is not available in this environment');
+  }
   if (browser && browser.isConnected()) return browser;
 
   logger.info('Launching Puppeteer browser...');
