@@ -15,6 +15,35 @@ const { body, param } = require('express-validator');
 const { authenticate } = require('../middleware/auth');
 const sequelize = require('../config/database');
 
+let getFetcher = null;
+try {
+  getFetcher = require('../../../services/coding-platform/src/fetchers').getFetcher;
+} catch (e) {
+  console.warn('[CodingProblems] Initial getFetcher require:', e.message);
+}
+
+async function safeFetchPlatform(platform, profileUrl) {
+  if (!profileUrl) return null;
+  try {
+    if (!getFetcher) {
+      getFetcher = require('../../../services/coding-platform/src/fetchers').getFetcher;
+    }
+    const fetcher = getFetcher(platform.trim().toUpperCase());
+    if (fetcher) {
+      const res = await fetcher(profileUrl);
+      if (res && typeof res.totalProblemsSolved === 'number') {
+        return {
+          total: res.totalProblemsSolved,
+          sql: res.sqlProblemsSolved || 0
+        };
+      }
+    }
+  } catch (err) {
+    console.warn(`[CodingProblems] safeFetchPlatform error for ${platform}:`, err.message);
+  }
+  return null;
+}
+
 const router = express.Router();
 
 // Tier definitions (both thresholds must be met)
@@ -81,20 +110,12 @@ router.post(
       let finalTotal = total_solved || 0;
       let finalSql = sql_solved || 0;
 
-      // Auto-fetch stats if profile_url is given and counts are 0
-      if (profile_url && (!finalTotal || finalTotal === 0)) {
-        try {
-          const { getFetcher } = require('../../../services/coding-platform/src/fetchers');
-          const fetcher = getFetcher(platform.trim().toUpperCase());
-          if (fetcher) {
-            const fetchResult = await fetcher(profile_url);
-            if (fetchResult && typeof fetchResult.totalProblemsSolved === 'number') {
-              finalTotal = fetchResult.totalProblemsSolved;
-              finalSql = fetchResult.sqlProblemsSolved || 0;
-            }
-          }
-        } catch (fetchErr) {
-          console.warn('[CodingProblems AutoFetch Warning]:', fetchErr.message);
+      // Auto-fetch stats if profile_url is given
+      if (profile_url) {
+        const fetchedStats = await safeFetchPlatform(platform, profile_url);
+        if (fetchedStats && fetchedStats.total > 0) {
+          finalTotal = fetchedStats.total;
+          finalSql = fetchedStats.sql;
         }
       }
 
@@ -118,8 +139,11 @@ router.post(
       let isUpdate = false;
 
       if (existing.length > 0) {
-        // UPSERT: Update existing row with new counts & URL
+        // UPSERT: Update existing row with new counts & URL (never overwrite with 0 if previous count > 0)
         isUpdate = true;
+        const resolvedTotal = finalTotal > 0 ? finalTotal : (existing[0].total_solved || 0);
+        const resolvedSql = finalTotal > 0 ? finalSql : (existing[0].sql_solved || 0);
+
         await sequelize.query(
           `UPDATE coding_problems_evidence
            SET total_solved = :total_solved,
@@ -132,8 +156,8 @@ router.post(
           {
             replacements: {
               id: existing[0].id,
-              total_solved: finalTotal,
-              sql_solved: finalSql,
+              total_solved: resolvedTotal,
+              sql_solved: resolvedSql,
               profile_url: profile_url || null,
               fetch_method: fetch_method || 'MANUAL'
             },
@@ -161,8 +185,8 @@ router.post(
           }
         );
 
-        const totalSolved = allVerified.reduce((sum, e) => sum + e.total_solved, 0);
-        const sqlSolved = allVerified.reduce((sum, e) => sum + e.sql_solved, 0);
+        const totalSolved = allVerified.reduce((sum, e) => sum + (e.total_solved || 0), 0);
+        const sqlSolved = allVerified.reduce((sum, e) => sum + (e.sql_solved || 0), 0);
         const marks = calculateCodingProblemsMarks(totalSolved, sqlSolved);
 
         await sequelize.query(
@@ -247,18 +271,10 @@ router.post(
       let autoTotal = 0;
       let autoSql = 0;
       if (profile_url) {
-        try {
-          const { getFetcher } = require('../../../services/coding-platform/src/fetchers');
-          const fetcher = getFetcher(platform.trim().toUpperCase());
-          if (fetcher) {
-            const result = await fetcher(profile_url);
-            if (result && typeof result.totalProblemsSolved === 'number') {
-              autoTotal = result.totalProblemsSolved;
-              autoSql = result.sqlProblemsSolved || 0;
-            }
-          }
-        } catch (fetchErr) {
-          console.warn('[CodingProblems AutoFetch Warning in Verify]:', fetchErr.message);
+        const fetchedStats = await safeFetchPlatform(platform, profile_url);
+        if (fetchedStats && fetchedStats.total > 0) {
+          autoTotal = fetchedStats.total;
+          autoSql = fetchedStats.sql;
         }
       }
 
@@ -273,8 +289,8 @@ router.post(
       );
 
       if (existing.length > 0) {
-        const finalTotal = autoTotal || existing[0].total_solved || 0;
-        const finalSql = autoSql || existing[0].sql_solved || 0;
+        const finalTotal = autoTotal > 0 ? autoTotal : (existing[0].total_solved || 0);
+        const finalSql = autoTotal > 0 ? autoSql : (existing[0].sql_solved || 0);
 
         await sequelize.query(
           `UPDATE coding_problems_evidence
@@ -392,6 +408,23 @@ router.get(
           type: sequelize.QueryTypes.SELECT
         }
       );
+
+      // Auto-heal zero counts if profile URL exists
+      for (const item of evidence) {
+        if ((!item.total_solved || item.total_solved === 0) && item.profile_url) {
+          try {
+            const fresh = await safeFetchPlatform(item.platform, item.profile_url);
+            if (fresh && fresh.total > 0) {
+              item.total_solved = fresh.total;
+              item.sql_solved = fresh.sql;
+              await sequelize.query(
+                `UPDATE coding_problems_evidence SET total_solved = :t, sql_solved = :s, last_fetched_at = NOW() WHERE id = :id`,
+                { replacements: { t: fresh.total, s: fresh.sql, id: item.id }, type: sequelize.QueryTypes.UPDATE }
+              );
+            }
+          } catch (_) {}
+        }
+      }
 
       res.json({
         success: true,
