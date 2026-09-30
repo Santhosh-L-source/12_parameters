@@ -111,7 +111,9 @@ router.post(
         return res.status(401).json({
           success: false,
           error: 'Invalid credentials',
-          message: 'Username or password is incorrect'
+          message: user.role === 'student'
+            ? 'Incorrect password. Note: For students, your password is your 12-digit Register Number.'
+            : 'Username or password is incorrect.'
         });
       }
 

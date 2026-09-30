@@ -148,13 +148,15 @@ const Login = () => {
             </div>
 
             <div className="form-group">
-              <label htmlFor="password">Password</label>
+              <label htmlFor="password">
+                {roleMode === 'student' ? 'Password (Register Number)' : 'Password'}
+              </label>
               <input
                 type="password"
                 id="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter password"
+                placeholder={roleMode === 'student' ? 'e.g. 312324104001' : 'Enter password'}
                 disabled={loading}
               />
             </div>
