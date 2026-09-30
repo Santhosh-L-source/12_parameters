@@ -1,4 +1,4 @@
-require('dotenv').config();
+try { require('dotenv').config(); } catch (e) {}
 const { Sequelize } = require('sequelize');
 const pg = require('pg');
 

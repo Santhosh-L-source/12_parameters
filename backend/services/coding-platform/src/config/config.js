@@ -1,4 +1,4 @@
-require('dotenv').config();
+try { require('dotenv').config(); } catch (e) {}
 
 module.exports = {
   port: parseInt(process.env.PORT, 10) || 3000,
