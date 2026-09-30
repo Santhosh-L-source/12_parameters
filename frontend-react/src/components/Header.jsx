@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { authAPI } from '../services/api';
 import { getUser, getUserRole } from '../utils/auth';
@@ -8,6 +9,7 @@ const Header = () => {
   const location = useLocation();
   const user = getUser();
   const role = getUserRole();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleLogout = () => {
     authAPI.logout();
@@ -19,28 +21,45 @@ const Header = () => {
   const isAdminDash = location.pathname === '/admin';
 
   const handleHomeClick = () => {
+    setMobileMenuOpen(false);
     if (role === 'admin') navigate('/admin');
     else if (role === 'mentor') navigate('/mentor');
     else navigate('/dashboard');
   };
 
+  const navigateTo = (path) => {
+    setMobileMenuOpen(false);
+    navigate(path);
+  };
+
   return (
     <header className="header">
-      <div className="logo" onClick={handleHomeClick} style={{ cursor: 'pointer' }}>
-        <span>📊</span>
-        <span>
-          Hope Project <span className="logo-text">— Achievement Tracker</span>
-        </span>
+      <div className="header-main-bar">
+        <div className="logo" onClick={handleHomeClick} style={{ cursor: 'pointer' }}>
+          <span className="logo-icon">📊</span>
+          <span className="logo-title">
+            Hope Project <span className="logo-text">— Tracker</span>
+          </span>
+        </div>
+
+        {/* Mobile Hamburger Toggle Button */}
+        <button
+          className="mobile-menu-toggle"
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          aria-label="Toggle navigation menu"
+        >
+          {mobileMenuOpen ? '✕' : '☰'}
+        </button>
       </div>
 
-      <div className="header-right">
+      <div className={`header-right ${mobileMenuOpen ? 'mobile-open' : ''}`}>
         {/* Strictly Role-Restricted Navigation */}
         {role === 'student' && (
           <a
             href="#"
             onClick={(e) => {
               e.preventDefault();
-              navigate('/dashboard');
+              navigateTo('/dashboard');
             }}
             className={`nav-link ${isStudentDash ? 'active' : ''}`}
           >
@@ -53,7 +72,7 @@ const Header = () => {
             href="#"
             onClick={(e) => {
               e.preventDefault();
-              navigate('/mentor');
+              navigateTo('/mentor');
             }}
             className={`nav-link ${isMentorDash ? 'active' : ''}`}
           >
@@ -66,7 +85,7 @@ const Header = () => {
             href="#"
             onClick={(e) => {
               e.preventDefault();
-              navigate('/admin');
+              navigateTo('/admin');
             }}
             className={`nav-link ${isAdminDash ? 'active' : ''}`}
           >
@@ -76,13 +95,15 @@ const Header = () => {
 
         {user && (
           <div className="user-badge-header">
-            <span className="user-name">{user.name || user.id_number}</span>
-            <span className={`role-tag ${role}`}>{role.toUpperCase()}</span>
+            <span className="user-name" title={user.name || user.id_number}>
+              {user.name ? user.name.split(' (')[0] : (user.id_number || 'User')}
+            </span>
+            <span className={`role-tag ${role}`}>{role?.toUpperCase()}</span>
           </div>
         )}
 
         <button className="logout-btn" onClick={handleLogout}>
-          Logout
+          <span>🚪</span> Logout
         </button>
       </div>
     </header>
@@ -90,3 +111,4 @@ const Header = () => {
 };
 
 export default Header;
+

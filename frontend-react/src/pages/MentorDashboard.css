@@ -377,3 +377,74 @@
 .module-card:hover .arrow {
   color: #2563eb;
 }
+
+/* ==========================================================================
+   Mobile Responsive Adjustments (< 768px & < 480px)
+   ========================================================================== */
+@media (max-width: 768px) {
+  .mentor-dashboard .container {
+    padding: 1.25rem 0.75rem;
+  }
+
+  .dashboard-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .dashboard-header h1 {
+    font-size: 1.5rem;
+  }
+
+  .total-pending-badge {
+    width: 100%;
+    flex-direction: row;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+  }
+
+  .mentor-tabs {
+    gap: 0.25rem;
+    margin-bottom: 1.25rem;
+    overflow-x: auto;
+  }
+
+  .mentor-tab-btn {
+    padding: 0.6rem 1rem;
+    font-size: 0.88rem;
+    white-space: nowrap;
+  }
+
+  .mentor-stats-grid,
+  .verification-modules-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .student-filter-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+
+  .student-filter-bar input,
+  .student-filter-bar select {
+    width: 100%;
+  }
+
+  .student-card-item {
+    padding: 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .dashboard-header h1 {
+    font-size: 1.35rem;
+  }
+
+  .stat-value {
+    font-size: 1.75rem;
+  }
+}
+

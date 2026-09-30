@@ -391,17 +391,127 @@
 }
 
 
+/* ==========================================================================
+   Mobile Responsive Adjustments
+   ========================================================================== */
 @media (max-width: 860px) {
+  .dashboard-page .container {
+    padding: 20px 16px;
+  }
+
   .hero-profile-card {
-    padding: 28px 24px;
-    gap: 24px;
+    padding: 24px 20px;
+    gap: 20px;
+    border-radius: 18px;
+  }
+
+  .hero-left {
+    min-width: 100%;
+  }
+
+  .student-full-name {
+    font-size: 1.75rem;
   }
 
   .score-hero-box {
     width: 100%;
+    min-width: 100%;
+    padding: 20px;
   }
 
   .modules-grid {
     grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .dashboard-page .container {
+    padding: 14px 10px;
+  }
+
+  .hero-profile-card {
+    padding: 18px 14px;
+    border-radius: 14px;
+  }
+
+  .student-full-name {
+    font-size: 1.45rem;
+    margin-bottom: 10px;
+  }
+
+  .welcome-tag {
+    font-size: 0.78rem;
+    padding: 4px 10px;
+  }
+
+  .student-meta-chips {
+    gap: 6px;
+    margin-bottom: 16px;
+  }
+
+  .meta-chip {
+    font-size: 0.76rem;
+    padding: 4px 8px;
+  }
+
+  .milestone-container {
+    padding: 12px 14px;
+    border-radius: 12px;
+  }
+
+  .milestone-text {
+    font-size: 0.8rem;
+  }
+
+  .score-hero-box {
+    padding: 16px 14px;
+    border-radius: 14px;
+  }
+
+  .score-hero-number {
+    font-size: 2.6rem;
+  }
+
+  .modules-section-header h2 {
+    font-size: 1.25rem;
+  }
+
+  .section-subtitle {
+    font-size: 0.85rem;
+  }
+
+  .module-card {
+    padding: 16px 14px;
+    border-radius: 14px;
+    gap: 12px;
+  }
+
+  .module-icon-box {
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+  }
+
+  .module-icon-emoji {
+    font-size: 20px;
+  }
+
+  .module-title {
+    font-size: 1.02rem;
+  }
+
+  .module-desc {
+    font-size: 0.82rem;
+  }
+
+  .module-card-footer {
+    padding-top: 10px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .action-hint {
+    font-size: 0.8rem;
   }
 }

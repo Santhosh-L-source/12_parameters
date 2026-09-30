@@ -288,8 +288,73 @@ td {
   font-size: 0.95rem;
 }
 
+/* ==========================================================================
+   Mobile Responsive Adjustments (< 768px & < 480px)
+   ========================================================================== */
+@media (max-width: 768px) {
+  .competition-page .container {
+    padding: 16px 12px;
+  }
 
-.alert-error {
-  background: #fee2e2;
-  color: #991b1b;
+  .breadcrumb {
+    margin-bottom: 16px;
+    font-size: 13px;
+  }
+
+  .page-title {
+    font-size: 22px;
+  }
+
+  .form-card {
+    padding: 20px 16px;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .submit-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .stat-card {
+    padding: 16px 18px;
+  }
+
+  .table-card {
+    padding: 16px 12px;
+  }
+
+  .table-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .refresh-btn {
+    width: 100%;
+    text-align: center;
+  }
 }
+
+@media (max-width: 480px) {
+  .page-title {
+    font-size: 19px;
+  }
+
+  .stat-value {
+    font-size: 1.65rem !important;
+  }
+
+  .scoring-tier-grid {
+    grid-template-columns: 1fr;
+  }
+}
+

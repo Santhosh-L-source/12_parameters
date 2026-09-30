@@ -1061,3 +1061,106 @@
   font-family: monospace;
 }
 
+/* ==========================================================================
+   Mobile Responsive Adjustments (< 768px & < 480px)
+   ========================================================================== */
+@media (max-width: 768px) {
+  .admin-container {
+    padding: 1.25rem 0.75rem;
+  }
+
+  .admin-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .admin-header h1 {
+    font-size: 1.5rem;
+  }
+
+  .admin-header-actions {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .admin-header-actions button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .admin-tabs {
+    gap: 0.25rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .tab-btn {
+    padding: 0.6rem 0.9rem;
+    font-size: 0.85rem;
+  }
+
+  .stats-cards-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .faculty-mentors-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .filters-row,
+  .search-filter-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+
+  .filters-row input,
+  .filters-row select,
+  .search-filter-bar input,
+  .search-filter-bar select {
+    width: 100%;
+  }
+
+  .cohort-header-card {
+    padding: 1rem;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .cohort-header-info {
+    width: 100%;
+  }
+
+  .back-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .modal-content,
+  .modal-dialog {
+    width: 95% !important;
+    padding: 1.25rem !important;
+    margin: 10px auto !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .admin-header h1 {
+    font-size: 1.35rem;
+  }
+
+  .stat-card-value {
+    font-size: 1.8rem;
+  }
+
+  .mentor-card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+}
+
+

@@ -335,3 +335,88 @@
   justify-content: flex-end;
   gap: 0.75rem;
 }
+
+/* ==========================================================================
+   Mobile Responsive Adjustments (< 768px & < 480px)
+   ========================================================================== */
+@media (max-width: 768px) {
+  .coding-container {
+    padding: 1.25rem 1rem;
+  }
+
+  .coding-header-card {
+    padding: 1.25rem;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+  }
+
+  .student-meta-fields {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .coding-section-card {
+    padding: 1.25rem;
+  }
+
+  .platform-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+    padding: 1rem;
+  }
+
+  .platform-badge-pill {
+    min-width: 100%;
+  }
+
+  .platform-input-wrapper {
+    width: 100%;
+  }
+
+  .platform-actions {
+    width: 100%;
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .verify-modal-dialog {
+    width: 94%;
+    margin: 16px auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .coding-container {
+    padding: 1rem 0.5rem;
+  }
+
+  .coding-header-card,
+  .coding-section-card {
+    padding: 1rem 0.85rem;
+    border-radius: 12px;
+  }
+
+  .section-title {
+    font-size: 1.15rem;
+  }
+
+  .platform-actions button {
+    width: 100%;
+  }
+
+  .verify-modal-body {
+    padding: 1.25rem 1rem;
+  }
+
+  .verify-modal-footer {
+    padding: 1rem;
+    flex-direction: column-reverse;
+  }
+
+  .verify-modal-footer button {
+    width: 100%;
+  }
+}
+

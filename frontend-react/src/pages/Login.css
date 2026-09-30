@@ -251,3 +251,54 @@
   color: #2563eb;
   font-weight: 700;
 }
+
+/* ==========================================================================
+   Mobile Responsive Adjustments
+   ========================================================================== */
+@media (max-width: 480px) {
+  .login-header {
+    padding: 14px 16px;
+  }
+
+  .main-content {
+    padding: 20px 12px;
+  }
+
+  .login-card {
+    padding: 24px 16px;
+    border-radius: 12px;
+  }
+
+  .welcome-text {
+    margin-bottom: 20px;
+  }
+
+  .welcome-text h1 {
+    font-size: 22px;
+  }
+
+  .welcome-text p {
+    font-size: 13px;
+  }
+
+  .role-switcher {
+    margin-bottom: 18px;
+  }
+
+  .role-tab {
+    font-size: 13px;
+    padding: 7px 8px;
+  }
+
+  .login-card .form-group input {
+    padding: 10px 14px;
+    font-size: 14px;
+  }
+
+  .login-btn {
+    padding: 12px;
+    font-size: 15px;
+    margin-top: 18px;
+  }
+}
+
