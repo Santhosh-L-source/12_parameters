@@ -584,12 +584,22 @@ function getStudentYearAndBatch(idNumber, registerNumber) {
   const id = String(idNumber || '').toLowerCase().trim();
   const reg = String(registerNumber || '').toLowerCase().trim();
 
-  if (id.startsWith('25') || reg.includes('25') || id.includes('25')) {
+  // 1. Check direct prefix of Roll Number (id_number)
+  if (id.startsWith('25')) {
     return { year: 2, batch: '2029', label: '2nd Year (2029 Batch)', shortLabel: '2nd Year (2029)', badgeClass: 'year-2' };
   }
-  if (id.startsWith('24') || reg.includes('24') || id.includes('24')) {
+  if (id.startsWith('24')) {
     return { year: 3, batch: '2028', label: '3rd Year (2028 Batch)', shortLabel: '3rd Year (2028)', badgeClass: 'year-3' };
   }
+
+  // 2. Check Register Number prefix (e.g. 312325... or 312324...)
+  if (reg.startsWith('312325') || id.startsWith('312325')) {
+    return { year: 2, batch: '2029', label: '2nd Year (2029 Batch)', shortLabel: '2nd Year (2029)', badgeClass: 'year-2' };
+  }
+  if (reg.startsWith('312324') || id.startsWith('312324')) {
+    return { year: 3, batch: '2028', label: '3rd Year (2028 Batch)', shortLabel: '3rd Year (2028)', badgeClass: 'year-3' };
+  }
+
   return { year: 3, batch: '2028', label: '3rd Year (2028 Batch)', shortLabel: '3rd Year (2028)', badgeClass: 'year-3' };
 }
 
@@ -635,9 +645,9 @@ router.get('/student-scores', async (req, res) => {
 
     // Year / Batch filtering
     if (year === '2' || year === '2nd' || batch === '2029') {
-      studentQuery += ` AND (LOWER(p.id_number) LIKE '25%' OR p.register_number LIKE '%25%')`;
+      studentQuery += ` AND ((LOWER(TRIM(p.id_number)) LIKE '25%' OR p.register_number LIKE '312325%' OR p.id_number LIKE '312325%') AND NOT (LOWER(TRIM(p.id_number)) LIKE '24%'))`;
     } else if (year === '3' || year === '3rd' || batch === '2028') {
-      studentQuery += ` AND (LOWER(p.id_number) LIKE '24%' OR p.register_number LIKE '%24%')`;
+      studentQuery += ` AND ((LOWER(TRIM(p.id_number)) LIKE '24%' OR p.register_number LIKE '312324%' OR p.id_number LIKE '312324%') AND NOT (LOWER(TRIM(p.id_number)) LIKE '25%'))`;
     }
 
     studentQuery += ` ORDER BY p.id_number ASC`;
@@ -812,8 +822,8 @@ router.get('/mentors', async (req, res) => {
         m.department,
         m.mentor_year,
         COUNT(s.id_number) as assigned_count,
-        COUNT(CASE WHEN LOWER(s.id_number) LIKE '25%' OR s.register_number LIKE '%25%' THEN 1 END) as second_year_count,
-        COUNT(CASE WHEN LOWER(s.id_number) LIKE '24%' OR s.register_number LIKE '%24%' THEN 1 END) as third_year_count
+        COUNT(CASE WHEN (LOWER(TRIM(s.id_number)) LIKE '25%' OR s.register_number LIKE '312325%') AND NOT (LOWER(TRIM(s.id_number)) LIKE '24%') THEN 1 END) as second_year_count,
+        COUNT(CASE WHEN (LOWER(TRIM(s.id_number)) LIKE '24%' OR s.register_number LIKE '312324%') AND NOT (LOWER(TRIM(s.id_number)) LIKE '25%') THEN 1 END) as third_year_count
       FROM profiles m
       LEFT JOIN profiles s ON s.assigned_mentor_id = m.id_number AND s.role = 'student'
       ${yearFilter} AND m.role = 'mentor'
@@ -918,9 +928,10 @@ router.post('/auto-assign-departments', async (req, res) => {
           UPDATE profiles
           SET assigned_mentor_id = :mentorId
           WHERE role = 'student'
-            AND (LOWER(id_number) LIKE '24%' OR register_number LIKE '%24%')
+            AND (LOWER(TRIM(id_number)) LIKE '24%' OR register_number LIKE '312324%' OR id_number LIKE '312324%')
+            AND NOT (LOWER(TRIM(id_number)) LIKE '25%' OR register_number LIKE '312325%')
             AND ${deptCondition}
-            AND (assigned_mentor_id IS NULL OR assigned_mentor_id = '')
+            AND (assigned_mentor_id IS NULL OR assigned_mentor_id = '' OR assigned_mentor_id LIKE '%2ND%')
         `, {
           replacements: { mentorId: m.id_number, dept: m.department }
         });
@@ -945,9 +956,10 @@ router.post('/auto-assign-departments', async (req, res) => {
           UPDATE profiles
           SET assigned_mentor_id = :mentorId
           WHERE role = 'student'
-            AND (LOWER(id_number) LIKE '25%' OR register_number LIKE '%25%')
+            AND (LOWER(TRIM(id_number)) LIKE '25%' OR register_number LIKE '312325%' OR id_number LIKE '312325%')
+            AND NOT (LOWER(TRIM(id_number)) LIKE '24%' OR register_number LIKE '312324%')
             AND ${deptCondition}
-            AND (assigned_mentor_id IS NULL OR assigned_mentor_id = '')
+            AND (assigned_mentor_id IS NULL OR assigned_mentor_id = '' OR assigned_mentor_id LIKE '%3RD%')
         `, {
           replacements: { mentorId: m.id_number, dept: m.department }
         });

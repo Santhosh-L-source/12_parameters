@@ -58,7 +58,7 @@ async function seedYearMentors() {
 
     console.log(`✅ Upserted ${allYearMentors.length} year-specific mentors.`);
 
-    // 4. Auto-assign 3rd year students to 3rd year mentors
+    // 4. Auto-assign 3rd year students to 3rd year mentors (strictly 24... rolls / 312324... registers)
     for (const m of thirdYearMentors) {
       let deptFilter = `department = '${m.dept}'`;
       if (m.dept === 'CSE') {
@@ -71,14 +71,15 @@ async function seedYearMentors() {
         UPDATE profiles
         SET assigned_mentor_id = :mentorId
         WHERE role = 'student'
-          AND (LOWER(id_number) LIKE '24%' OR register_number LIKE '%24%')
+          AND (LOWER(TRIM(id_number)) LIKE '24%' OR register_number LIKE '312324%' OR id_number LIKE '312324%')
+          AND NOT (LOWER(TRIM(id_number)) LIKE '25%' OR register_number LIKE '312325%')
           AND ${deptFilter};
       `, {
         replacements: { mentorId: m.id }
       });
     }
 
-    // 5. Auto-assign 2nd year students to 2nd year mentors
+    // 5. Auto-assign 2nd year students to 2nd year mentors (strictly 25... rolls / 312325... registers)
     for (const m of secondYearMentors) {
       let deptFilter = `department = '${m.dept}'`;
       if (m.dept === 'CSE') {
@@ -91,31 +92,35 @@ async function seedYearMentors() {
         UPDATE profiles
         SET assigned_mentor_id = :mentorId
         WHERE role = 'student'
-          AND (LOWER(id_number) LIKE '25%' OR register_number LIKE '%25%')
+          AND (LOWER(TRIM(id_number)) LIKE '25%' OR register_number LIKE '312325%' OR id_number LIKE '312325%')
+          AND NOT (LOWER(TRIM(id_number)) LIKE '24%' OR register_number LIKE '312324%')
           AND ${deptFilter};
       `, {
         replacements: { mentorId: m.id }
       });
     }
 
-    // Assign any remaining unassigned 2nd year or 3rd year students to CSE mentors as default fallback
+    // Assign any remaining unassigned 3rd year students to 3rd Yr CSE mentor
     await sequelize.query(`
       UPDATE profiles
       SET assigned_mentor_id = 'MENTOR_3RD_CSE'
       WHERE role = 'student'
-        AND (LOWER(id_number) LIKE '24%' OR register_number LIKE '%24%')
-        AND (assigned_mentor_id IS NULL OR assigned_mentor_id = '');
+        AND (LOWER(TRIM(id_number)) LIKE '24%' OR register_number LIKE '312324%' OR id_number LIKE '312324%')
+        AND NOT (LOWER(TRIM(id_number)) LIKE '25%' OR register_number LIKE '312325%')
+        AND (assigned_mentor_id IS NULL OR assigned_mentor_id = '' OR assigned_mentor_id LIKE '%2ND%');
     `);
 
+    // Assign any remaining unassigned 2nd year students to 2nd Yr CSE mentor
     await sequelize.query(`
       UPDATE profiles
       SET assigned_mentor_id = 'MENTOR_2ND_CSE'
       WHERE role = 'student'
-        AND (LOWER(id_number) LIKE '25%' OR register_number LIKE '%25%')
-        AND (assigned_mentor_id IS NULL OR assigned_mentor_id = '');
+        AND (LOWER(TRIM(id_number)) LIKE '25%' OR register_number LIKE '312325%' OR id_number LIKE '312325%')
+        AND NOT (LOWER(TRIM(id_number)) LIKE '24%' OR register_number LIKE '312324%')
+        AND (assigned_mentor_id IS NULL OR assigned_mentor_id = '' OR assigned_mentor_id LIKE '%3RD%');
     `);
 
-    console.log('✅ Students assigned to their respective 3rd and 2nd Year mentors successfully!');
+    console.log('✅ Students accurately partitioned and assigned to their respective 3rd and 2nd Year mentors!');
   } catch (err) {
     console.error('❌ Error seeding year mentors:', err);
   } finally {
