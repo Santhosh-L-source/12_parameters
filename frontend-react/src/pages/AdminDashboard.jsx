@@ -18,6 +18,7 @@ const AdminDashboard = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDept, setSelectedDept] = useState('ALL');
   const [selectedTier, setSelectedTier] = useState('ALL');
+  const [selectedYear, setSelectedYear] = useState('ALL'); // 'ALL', '2', '3'
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ total: 0, total_pages: 1, limit: 50 });
   const [selectedStudentForModal, setSelectedStudentForModal] = useState(null);
@@ -32,8 +33,9 @@ const AdminDashboard = () => {
 
   // Uploader State
   const [uploadFile, setUploadFile] = useState(null);
-  const [semester, setSemester] = useState(4);
-  const [month, setMonth] = useState('September 2026');
+  const [uploadBatchYear, setUploadBatchYear] = useState('2029');
+  const [semester, setSemester] = useState(3);
+  const [month, setMonth] = useState('August 2026');
   const [uploadStatus, setUploadStatus] = useState(null);
   const [uploadLoading, setUploadLoading] = useState(false);
 
@@ -56,7 +58,7 @@ const AdminDashboard = () => {
     if (activeTab === 'mentors' && selectedMentor) {
       loadStudentScores();
     }
-  }, [activeTab, selectedMentor, searchTerm, selectedDept, selectedTier, page]);
+  }, [activeTab, selectedMentor, searchTerm, selectedDept, selectedTier, selectedYear, page]);
 
   const loadPendingCounts = async () => {
     try {
@@ -104,6 +106,7 @@ const AdminDashboard = () => {
       if (searchTerm) params.search = searchTerm;
       if (selectedDept !== 'ALL') params.department = selectedDept;
       if (selectedTier !== 'ALL') params.tier = selectedTier;
+      if (selectedYear !== 'ALL') params.year = selectedYear;
       if (selectedMentor) {
         params.mentor_id = (selectedMentor.id_number === '__UNASSIGNED__' || selectedMentor.id_number === 'UNASSIGNED') 
           ? 'UNASSIGNED' 
@@ -522,6 +525,28 @@ const AdminDashboard = () => {
                   </div>
                 </div>
 
+                {/* Batch Year Switcher Tabs */}
+                <div className="batch-year-tabs">
+                  <button
+                    className={`batch-year-btn ${selectedYear === 'ALL' ? 'active' : ''}`}
+                    onClick={() => { setSelectedYear('ALL'); setPage(1); }}
+                  >
+                    🎓 All Batches
+                  </button>
+                  <button
+                    className={`batch-year-btn year-2-tab ${selectedYear === '2' ? 'active' : ''}`}
+                    onClick={() => { setSelectedYear('2'); setPage(1); }}
+                  >
+                    📘 2nd Year (2029 Batch)
+                  </button>
+                  <button
+                    className={`batch-year-btn year-3-tab ${selectedYear === '3' ? 'active' : ''}`}
+                    onClick={() => { setSelectedYear('3'); setPage(1); }}
+                  >
+                    📙 3rd Year (2028 Batch)
+                  </button>
+                </div>
+
                 {/* Filter & Batch Action Toolbar */}
                 <div className="matrix-toolbar">
                   <div className="search-filter-group">
@@ -532,6 +557,17 @@ const AdminDashboard = () => {
                       onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
                       className="search-input"
                     />
+
+                    <select 
+                      value={selectedYear} 
+                      onChange={(e) => { setSelectedYear(e.target.value); setPage(1); }}
+                      className="filter-select"
+                      style={{ fontWeight: 600 }}
+                    >
+                      <option value="ALL">🎓 All Years / Batches</option>
+                      <option value="2">📘 2nd Year (2029 Batch)</option>
+                      <option value="3">📙 3rd Year (2028 Batch)</option>
+                    </select>
 
                     <select 
                       value={selectedTier} 
@@ -597,6 +633,7 @@ const AdminDashboard = () => {
                             />
                           </th>
                           <th>Student Info</th>
+                          <th>Batch / Year</th>
                           <th>Dept</th>
                           <th>100D</th>
                           <th>Lang</th>
@@ -630,6 +667,11 @@ const AdminDashboard = () => {
                                 <strong className="student-name">{st.name}</strong>
                                 <span className="student-roll">Roll: {st.id_number} | Reg: {st.register_number}</span>
                               </div>
+                            </td>
+                            <td>
+                              <span className={`year-pill ${st.year === 2 ? 'year-2' : 'year-3'}`}>
+                                {st.short_batch_label || (st.year === 2 ? '2nd Year (2029)' : '3rd Year (2028)')}
+                              </span>
                             </td>
                             <td>
                               <span className="dept-badge">{st.department}</span>

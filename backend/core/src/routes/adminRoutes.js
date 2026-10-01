@@ -578,12 +578,28 @@ function calculateTier(totalScore) {
 }
 
 /**
+ * Helper to determine student year and batch
+ */
+function getStudentYearAndBatch(idNumber, registerNumber) {
+  const id = String(idNumber || '').toLowerCase().trim();
+  const reg = String(registerNumber || '').toLowerCase().trim();
+
+  if (id.startsWith('25') || reg.includes('25') || id.includes('25')) {
+    return { year: 2, batch: '2029', label: '2nd Year (2029 Batch)', shortLabel: '2nd Year (2029)', badgeClass: 'year-2' };
+  }
+  if (id.startsWith('24') || reg.includes('24') || id.includes('24')) {
+    return { year: 3, batch: '2028', label: '3rd Year (2028 Batch)', shortLabel: '3rd Year (2028)', badgeClass: 'year-3' };
+  }
+  return { year: 3, batch: '2028', label: '3rd Year (2028 Batch)', shortLabel: '3rd Year (2028)', badgeClass: 'year-3' };
+}
+
+/**
  * GET /api/admin/student-scores
  * Get all students with their 12-parameter scores and computed readiness level
  */
 router.get('/student-scores', async (req, res) => {
   try {
-    const { search, department, tier, mentor_id, page = 1, limit = 50 } = req.query;
+    const { search, department, tier, mentor_id, year, batch, page = 1, limit = 50 } = req.query;
     const offset = (parseInt(page) - 1) * parseInt(limit);
 
     // 1. Fetch all students
@@ -617,6 +633,13 @@ router.get('/student-scores', async (req, res) => {
       }
     }
 
+    // Year / Batch filtering
+    if (year === '2' || year === '2nd' || batch === '2029') {
+      studentQuery += ` AND (LOWER(p.id_number) LIKE '25%' OR p.register_number LIKE '%25%')`;
+    } else if (year === '3' || year === '3rd' || batch === '2028') {
+      studentQuery += ` AND (LOWER(p.id_number) LIKE '24%' OR p.register_number LIKE '%24%')`;
+    }
+
     studentQuery += ` ORDER BY p.id_number ASC`;
 
     const allStudents = await sequelize.query(studentQuery, {
@@ -627,7 +650,7 @@ router.get('/student-scores', async (req, res) => {
     if (allStudents.length === 0) {
       return res.json({
         success: true,
-        stats: { total: 0, avg_score: 0, elite: 0, l3: 0, l2: 0, l1: 0, not_eligible: 0, unassigned: 0 },
+        stats: { total: 0, second_year_count: 0, third_year_count: 0, avg_score: 0, elite: 0, l3: 0, l2: 0, l1: 0, not_eligible: 0, unassigned: 0 },
         pagination: { page: parseInt(page), limit: parseInt(limit), total: 0, total_pages: 0 },
         students: []
       });
@@ -653,6 +676,8 @@ router.get('/student-scores', async (req, res) => {
     // 3. Assemble full student profile objects & tier statistics
     let stats = {
       total: allStudents.length,
+      second_year_count: 0,
+      third_year_count: 0,
       total_score_sum: 0,
       elite: 0,
       l3: 0,
@@ -667,8 +692,12 @@ router.get('/student-scores', async (req, res) => {
       const totalScore = Object.values(sMap).reduce((acc, v) => acc + (parseFloat(v) || 0), 0);
       const roundedTotal = Math.round(totalScore * 10) / 10;
       const readinessTier = calculateTier(roundedTotal);
+      const yearInfo = getStudentYearAndBatch(st.id_number, st.register_number);
 
       stats.total_score_sum += roundedTotal;
+      if (yearInfo.year === 2) stats.second_year_count++;
+      else stats.third_year_count++;
+
       if (readinessTier.level === 'Elite') stats.elite++;
       else if (readinessTier.level === 'Level 3') stats.l3++;
       else if (readinessTier.level === 'Level 2') stats.l2++;
@@ -685,6 +714,11 @@ router.get('/student-scores', async (req, res) => {
         email: st.email,
         department: st.department,
         college: st.college,
+        year: yearInfo.year,
+        batch: yearInfo.batch,
+        batch_label: yearInfo.label,
+        short_batch_label: yearInfo.shortLabel,
+        batch_badge_class: yearInfo.badgeClass,
         assigned_mentor_id: st.assigned_mentor_id,
         assigned_mentor_name: st.assigned_mentor_name || 'Not Assigned',
         scores: {
@@ -727,6 +761,8 @@ router.get('/student-scores', async (req, res) => {
       success: true,
       stats: {
         total: stats.total,
+        second_year_count: stats.second_year_count,
+        third_year_count: stats.third_year_count,
         avg_score: stats.total > 0 ? parseFloat((stats.total_score_sum / stats.total).toFixed(1)) : 0,
         elite: stats.elite,
         l3: stats.l3,
