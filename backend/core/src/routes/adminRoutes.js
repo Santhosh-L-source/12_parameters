@@ -787,31 +787,52 @@ router.get('/student-scores', async (req, res) => {
 
 /**
  * GET /api/admin/mentors
- * Get all mentors and their assigned student counts
+ * Get mentors filtered by year (2nd Year / 3rd Year) with their mentee counts
  */
 router.get('/mentors', async (req, res) => {
   try {
+    const { year } = req.query;
+    let yearFilter = '';
+    const replacements = {};
+
+    if (year === '2' || year === '2nd') {
+      yearFilter = `WHERE (m.mentor_year = 2 OR m.id_number LIKE '%2ND%')`;
+    } else if (year === '3' || year === '3rd') {
+      yearFilter = `WHERE (m.mentor_year = 3 OR m.id_number LIKE '%3RD%')`;
+    } else {
+      // Exclude legacy duplicate mentors with 0 mentees if year-specific exist
+      yearFilter = `WHERE (m.mentor_year IS NOT NULL OR m.id_number LIKE '%2ND%' OR m.id_number LIKE '%3RD%')`;
+    }
+
     const mentors = await sequelize.query(`
       SELECT 
         m.id_number,
         m.name,
         m.email,
         m.department,
-        COUNT(s.id_number) as assigned_count
+        m.mentor_year,
+        COUNT(s.id_number) as assigned_count,
+        COUNT(CASE WHEN LOWER(s.id_number) LIKE '25%' OR s.register_number LIKE '%25%' THEN 1 END) as second_year_count,
+        COUNT(CASE WHEN LOWER(s.id_number) LIKE '24%' OR s.register_number LIKE '%24%' THEN 1 END) as third_year_count
       FROM profiles m
       LEFT JOIN profiles s ON s.assigned_mentor_id = m.id_number AND s.role = 'student'
-      WHERE m.role = 'mentor'
-      GROUP BY m.id_number, m.name, m.email, m.department
-      ORDER BY m.department ASC, m.name ASC
+      ${yearFilter} AND m.role = 'mentor'
+      GROUP BY m.id_number, m.name, m.email, m.department, m.mentor_year
+      ORDER BY m.mentor_year ASC, m.department ASC, m.name ASC
     `, {
+      replacements,
       type: sequelize.QueryTypes.SELECT
     });
 
     res.json({
       success: true,
+      year_filter: year || 'ALL',
       mentors: mentors.map(m => ({
         ...m,
-        assigned_count: parseInt(m.assigned_count) || 0
+        mentor_year: m.mentor_year || (m.id_number.includes('2ND') ? 2 : 3),
+        assigned_count: parseInt(m.assigned_count) || 0,
+        second_year_count: parseInt(m.second_year_count) || 0,
+        third_year_count: parseInt(m.third_year_count) || 0
       }))
     });
   } catch (error) {
@@ -839,7 +860,7 @@ router.post('/assign-mentor', async (req, res) => {
 
     // Verify mentor exists
     const [mentor] = await sequelize.query(`
-      SELECT id_number, name FROM profiles WHERE id_number = :mentor_id AND role = 'mentor'
+      SELECT id_number, name, department, mentor_year FROM profiles WHERE id_number = :mentor_id AND role = 'mentor'
     `, {
       replacements: { mentor_id },
       type: sequelize.QueryTypes.SELECT
@@ -872,32 +893,70 @@ router.post('/assign-mentor', async (req, res) => {
 
 /**
  * POST /api/admin/auto-assign-departments
- * Auto-assign students to mentors based on their department
+ * Auto-assign students to mentors based on their department & academic year
+ * Body: { year?: 2 | 3 | 'ALL' }
  */
 router.post('/auto-assign-departments', async (req, res) => {
   try {
-    const mentors = await sequelize.query(`
-      SELECT id_number, department, name FROM profiles WHERE role = 'mentor'
-    `, {
-      type: sequelize.QueryTypes.SELECT
-    });
+    const targetYear = req.body.year;
 
-    let assignedTotal = 0;
-    for (const m of mentors) {
-      const [result] = await sequelize.query(`
-        UPDATE profiles
-        SET assigned_mentor_id = :mentor_id
-        WHERE role = 'student' 
-          AND department = :department
-          AND (assigned_mentor_id IS NULL OR assigned_mentor_id = '')
-      `, {
-        replacements: { mentor_id: m.id_number, department: m.department }
-      });
+    // 1. Process 3rd Year (Batch 2028) if requested or ALL
+    if (!targetYear || targetYear === '3' || targetYear === 3 || targetYear === 'ALL') {
+      const mentors3rd = await sequelize.query(`
+        SELECT id_number, department, name FROM profiles WHERE role = 'mentor' AND (mentor_year = 3 OR id_number LIKE '%3RD%')
+      `, { type: sequelize.QueryTypes.SELECT });
+
+      for (const m of mentors3rd) {
+        let deptCondition = `department = :dept`;
+        if (m.department === 'CSE') {
+          deptCondition = `(department = 'CSE' OR department = 'M.Tech CSE')`;
+        } else if (m.department === 'AI & ML') {
+          deptCondition = `(department = 'AI & ML' OR department = 'CSE (AI & ML)')`;
+        }
+
+        await sequelize.query(`
+          UPDATE profiles
+          SET assigned_mentor_id = :mentorId
+          WHERE role = 'student'
+            AND (LOWER(id_number) LIKE '24%' OR register_number LIKE '%24%')
+            AND ${deptCondition}
+            AND (assigned_mentor_id IS NULL OR assigned_mentor_id = '')
+        `, {
+          replacements: { mentorId: m.id_number, dept: m.department }
+        });
+      }
+    }
+
+    // 2. Process 2nd Year (Batch 2029) if requested or ALL
+    if (!targetYear || targetYear === '2' || targetYear === 2 || targetYear === 'ALL') {
+      const mentors2nd = await sequelize.query(`
+        SELECT id_number, department, name FROM profiles WHERE role = 'mentor' AND (mentor_year = 2 OR id_number LIKE '%2ND%')
+      `, { type: sequelize.QueryTypes.SELECT });
+
+      for (const m of mentors2nd) {
+        let deptCondition = `department = :dept`;
+        if (m.department === 'CSE') {
+          deptCondition = `(department = 'CSE' OR department = 'M.Tech CSE')`;
+        } else if (m.department === 'AI & ML') {
+          deptCondition = `(department = 'AI & ML' OR department = 'CSE (AI & ML)')`;
+        }
+
+        await sequelize.query(`
+          UPDATE profiles
+          SET assigned_mentor_id = :mentorId
+          WHERE role = 'student'
+            AND (LOWER(id_number) LIKE '25%' OR register_number LIKE '%25%')
+            AND ${deptCondition}
+            AND (assigned_mentor_id IS NULL OR assigned_mentor_id = '')
+        `, {
+          replacements: { mentorId: m.id_number, dept: m.department }
+        });
+      }
     }
 
     res.json({
       success: true,
-      message: 'Auto-assigned students to their respective department mentors'
+      message: `Auto-assigned students to their respective 2nd/3rd year department mentors`
     });
   } catch (error) {
     console.error('[ADMIN AUTO ASSIGN] Error:', error.message);
@@ -906,4 +965,5 @@ router.post('/auto-assign-departments', async (req, res) => {
 });
 
 module.exports = router;
+
 

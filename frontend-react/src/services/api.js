@@ -277,13 +277,17 @@ export const adminAPI = {
     const query = new URLSearchParams(params).toString();
     return apiRequest(`/api/admin/student-scores${query ? `?${query}` : ''}`);
   },
-  getMentors: () => apiRequest('/api/admin/mentors'),
+  getMentors: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return apiRequest(`/api/admin/mentors${query ? `?${query}` : ''}`);
+  },
   assignMentor: (student_ids, mentor_id) => apiRequest('/api/admin/assign-mentor', {
     method: 'POST',
     body: JSON.stringify({ student_ids, mentor_id }),
   }),
-  autoAssignDepartments: () => apiRequest('/api/admin/auto-assign-departments', {
+  autoAssignDepartments: (data = {}) => apiRequest('/api/admin/auto-assign-departments', {
     method: 'POST',
+    body: JSON.stringify(data),
   }),
   uploadMonthlyCoding: (formData) => {
     const token = getAuthToken();

@@ -1,14 +1,13 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
 import { mentorAPI, adminAPI, API_BASE_URL } from '../services/api';
 import './AdminDashboard.css';
 
 const AdminDashboard = () => {
-  const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('mentors'); // mentors, uploader, anomalies, parameters
+  // Active Tab: 'cohorts_3rd', 'cohorts_2nd', 'uploader', 'parameters'
+  const [activeTab, setActiveTab] = useState('cohorts_3rd');
 
-  // Selected Mentor for Cohort View
+  // Selected Mentor for Cohort View (per year)
   const [selectedMentor, setSelectedMentor] = useState(null);
 
   // Student Scores Matrix State (for selected mentor's cohort)
@@ -18,13 +17,13 @@ const AdminDashboard = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDept, setSelectedDept] = useState('ALL');
   const [selectedTier, setSelectedTier] = useState('ALL');
-  const [selectedYear, setSelectedYear] = useState('ALL'); // 'ALL', '2', '3'
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ total: 0, total_pages: 1, limit: 50 });
   const [selectedStudentForModal, setSelectedStudentForModal] = useState(null);
 
-  // Mentor Assignment State
-  const [mentors, setMentors] = useState([]);
+  // Mentor Directory State
+  const [mentors3rd, setMentors3rd] = useState([]);
+  const [mentors2nd, setMentors2nd] = useState([]);
   const [mentorsLoading, setMentorsLoading] = useState(false);
   const [selectedStudentIds, setSelectedStudentIds] = useState([]);
   const [assignTargetMentor, setAssignTargetMentor] = useState('');
@@ -33,85 +32,79 @@ const AdminDashboard = () => {
 
   // Uploader State
   const [uploadFile, setUploadFile] = useState(null);
-  const [uploadBatchYear, setUploadBatchYear] = useState('2029');
   const [semester, setSemester] = useState(3);
   const [month, setMonth] = useState('August 2026');
   const [uploadStatus, setUploadStatus] = useState(null);
   const [uploadLoading, setUploadLoading] = useState(false);
-
-  // Anomalies state
-  const [anomalies, setAnomalies] = useState([]);
-  const [anomalyLoading, setAnomalyLoading] = useState(false);
-  const [scanResult, setScanResult] = useState(null);
-  const [scanning, setScanning] = useState(false);
-
-  // Review queues count
-  const [pendingCounts, setPendingCounts] = useState({});
+  const [importJob, setImportJob] = useState(null);
 
   useEffect(() => {
-    loadPendingCounts();
-    loadMentors();
-    loadAnomalies();
+    loadAllMentors();
   }, []);
 
+  // When active tab or mentor selection changes, reload appropriate data
   useEffect(() => {
-    if (activeTab === 'mentors' && selectedMentor) {
+    if ((activeTab === 'cohorts_3rd' || activeTab === 'cohorts_2nd') && selectedMentor) {
       loadStudentScores();
     }
-  }, [activeTab, selectedMentor, searchTerm, selectedDept, selectedTier, selectedYear, page]);
+  }, [activeTab, selectedMentor, searchTerm, selectedDept, selectedTier, page]);
 
-  const loadPendingCounts = async () => {
+  // When switching between 3rd Year and 2nd Year tabs
+  const handleTabChange = (newTab) => {
+    setActiveTab(newTab);
+    setSelectedMentor(null);
+    setSelectedStudentIds([]);
+    setSearchTerm('');
+    setSelectedTier('ALL');
+    setPage(1);
+
+    if (newTab === 'cohorts_3rd') {
+      if (mentors3rd.length > 0) setAssignTargetMentor(mentors3rd[0].id_number);
+    } else if (newTab === 'cohorts_2nd') {
+      if (mentors2nd.length > 0) setAssignTargetMentor(mentors2nd[0].id_number);
+    }
+  };
+
+  const loadAllMentors = async () => {
     try {
-      const results = await Promise.allSettled([
-        mentorAPI.getPendingHundredDays(),
-        mentorAPI.getPendingLanguage(),
-        mentorAPI.getPendingGate(),
-        mentorAPI.getPendingCompetition(),
-        mentorAPI.getPendingInternship(),
-        mentorAPI.getPendingCertificate(),
-        mentorAPI.getPendingAptitude(),
-        mentorAPI.getPendingCodingProblems(),
-        mentorAPI.getPendingCPRating(),
-        mentorAPI.getPendingOpenSource(),
-        mentorAPI.getPendingMonthlyCoding(),
-        mentorAPI.getPendingProjectPubPatent(),
+      setMentorsLoading(true);
+      const [res3rd, res2nd] = await Promise.all([
+        adminAPI.getMentors({ year: 3 }),
+        adminAPI.getMentors({ year: 2 })
       ]);
 
-      setPendingCounts({
-        hundredDays: results[0].status === 'fulfilled' ? results[0].value?.count || 0 : 0,
-        language: results[1].status === 'fulfilled' ? results[1].value?.count || 0 : 0,
-        gate: results[2].status === 'fulfilled' ? results[2].value?.count || 0 : 0,
-        competition: results[3].status === 'fulfilled' ? results[3].value?.count || 0 : 0,
-        internship: results[4].status === 'fulfilled' ? results[4].value?.count || 0 : 0,
-        certificate: results[5].status === 'fulfilled' ? results[5].value?.count || 0 : 0,
-        aptitude: results[6].status === 'fulfilled' ? results[6].value?.count || 0 : 0,
-        codingProblems: results[7].status === 'fulfilled' ? results[7].value?.count || 0 : 0,
-        cpRating: results[8].status === 'fulfilled' ? results[8].value?.count || 0 : 0,
-        openSource: results[9].status === 'fulfilled' ? results[9].value?.count || 0 : 0,
-        monthlyCoding: results[10].status === 'fulfilled' ? results[10].value?.count || 0 : 0,
-        projectPubPatent: results[11].status === 'fulfilled' ? results[11].value?.count || 0 : 0,
-      });
-    } catch (e) {
-      console.error('Error loading pending counts:', e);
+      if (res3rd.success) {
+        setMentors3rd(res3rd.mentors || []);
+        if (res3rd.mentors.length > 0 && !assignTargetMentor) {
+          setAssignTargetMentor(res3rd.mentors[0].id_number);
+        }
+      }
+      if (res2nd.success) {
+        setMentors2nd(res2nd.mentors || []);
+      }
+    } catch (err) {
+      console.error('Error loading mentors by year:', err);
+    } finally {
+      setMentorsLoading(false);
     }
   };
 
   const loadStudentScores = async () => {
+    if (!selectedMentor) return;
     try {
       setScoreLoading(true);
+      const currentYear = activeTab === 'cohorts_2nd' ? '2' : '3';
       const params = {
         page,
         limit: 50,
+        year: currentYear,
+        mentor_id: (selectedMentor.id_number === '__UNASSIGNED__' || selectedMentor.id_number === 'UNASSIGNED') 
+          ? 'UNASSIGNED' 
+          : selectedMentor.id_number
       };
       if (searchTerm) params.search = searchTerm;
       if (selectedDept !== 'ALL') params.department = selectedDept;
       if (selectedTier !== 'ALL') params.tier = selectedTier;
-      if (selectedYear !== 'ALL') params.year = selectedYear;
-      if (selectedMentor) {
-        params.mentor_id = (selectedMentor.id_number === '__UNASSIGNED__' || selectedMentor.id_number === 'UNASSIGNED') 
-          ? 'UNASSIGNED' 
-          : selectedMentor.id_number;
-      }
 
       const data = await adminAPI.getStudentScores(params);
       if (data.success) {
@@ -120,90 +113,11 @@ const AdminDashboard = () => {
         setPagination(data.pagination || { total: 0, total_pages: 1, limit: 50 });
       }
     } catch (err) {
-      console.error('Error loading student scores:', err);
+      console.error('Error loading cohort student scores:', err);
     } finally {
       setScoreLoading(false);
     }
   };
-
-  const loadMentors = async () => {
-    try {
-      setMentorsLoading(true);
-      const data = await adminAPI.getMentors();
-      if (data.success) {
-        setMentors(data.mentors || []);
-        if (data.mentors.length > 0 && !assignTargetMentor) {
-          setAssignTargetMentor(data.mentors[0].id_number);
-        }
-      }
-    } catch (err) {
-      console.error('Error loading mentors:', err);
-    } finally {
-      setMentorsLoading(false);
-    }
-  };
-
-  const loadAnomalies = async () => {
-    try {
-      setAnomalyLoading(true);
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_BASE_URL}/api/anomaly/flags`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await res.json();
-      if (data.success) {
-        setAnomalies(data.anomalies || []);
-      }
-    } catch (err) {
-      console.error('Error loading anomalies:', err);
-    } finally {
-      setAnomalyLoading(false);
-    }
-  };
-
-  const triggerIntegrityScan = async () => {
-    try {
-      setScanning(true);
-      setScanResult(null);
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_BASE_URL}/api/anomaly/scan-all`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await res.json();
-      setScanResult(data);
-      loadAnomalies();
-    } catch (err) {
-      console.error('Integrity scan error:', err);
-    } finally {
-      setScanning(false);
-    }
-  };
-
-  const resolveAnomaly = async (id, status) => {
-    try {
-      const token = localStorage.getItem('token');
-      const notes = prompt(`Enter resolution notes for ${status}:`, `Marked as ${status} by admin`);
-      if (notes === null) return;
-
-      const res = await fetch(`${API_BASE_URL}/api/anomaly/resolve/${id}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ status, notes })
-      });
-      const data = await res.json();
-      if (data.success) {
-        loadAnomalies();
-      }
-    } catch (err) {
-      console.error('Error resolving anomaly:', err);
-    }
-  };
-
-  const [importJob, setImportJob] = useState(null);
 
   const handleFileUpload = async (e) => {
     e.preventDefault();
@@ -228,7 +142,6 @@ const AdminDashboard = () => {
       if (data.jobId) {
         setImportJob({ id: data.jobId, status: 'PROCESSING', total_rows: data.totalRows || 0, processed_rows: 0 });
 
-        // Poll for job completion
         const pollInterval = setInterval(async () => {
           try {
             const statusRes = await adminAPI.getImportJobStatus(data.jobId);
@@ -243,7 +156,8 @@ const AdminDashboard = () => {
                   message: `Successfully processed ${job.processed_rows} student scores in ${job.summary?.totalTimeSeconds || '1.5'}s!`,
                   summary: job.summary
                 });
-                loadStudentScores();
+                loadAllMentors();
+                if (selectedMentor) loadStudentScores();
               } else if (job.status === 'FAILED') {
                 clearInterval(pollInterval);
                 setUploadLoading(false);
@@ -282,7 +196,7 @@ const AdminDashboard = () => {
       return;
     }
     if (!assignTargetMentor) {
-      alert('Please select a mentor.');
+      alert('Please select a target mentor.');
       return;
     }
 
@@ -291,10 +205,10 @@ const AdminDashboard = () => {
       setAssignSuccessMsg('');
       const res = await adminAPI.assignMentor(selectedStudentIds, assignTargetMentor);
       if (res.success) {
-        setAssignSuccessMsg(`Successfully assigned ${selectedStudentIds.length} student(s) to ${res.mentor?.name}!`);
+        setAssignSuccessMsg(`Successfully reassigned ${selectedStudentIds.length} student(s) to ${res.mentor?.name}!`);
         setSelectedStudentIds([]);
         loadStudentScores();
-        loadMentors();
+        loadAllMentors();
       } else {
         alert(res.error || 'Failed to assign mentor');
       }
@@ -306,17 +220,18 @@ const AdminDashboard = () => {
     }
   };
 
-  const handleAutoAssignByDept = async () => {
-    if (!window.confirm('Auto-assign all unassigned students to their respective department mentors (CSE -> MENTOR_CSE, IT -> MENTOR_IT, etc.)?')) {
+  const handleAutoAssign = async (targetYear) => {
+    const yearLabel = targetYear === 2 ? '2nd Year (2029 Batch)' : '3rd Year (2028 Batch)';
+    if (!window.confirm(`Auto-assign all unassigned ${yearLabel} students to their respective department mentors?`)) {
       return;
     }
     try {
       setAssignLoading(true);
-      const res = await adminAPI.autoAssignDepartments();
+      const res = await adminAPI.autoAssignDepartments({ year: targetYear });
       if (res.success) {
-        alert('Auto-assignment completed successfully!');
-        loadStudentScores();
-        loadMentors();
+        alert(`Auto-assignment for ${yearLabel} completed successfully!`);
+        loadAllMentors();
+        if (selectedMentor) loadStudentScores();
       }
     } catch (err) {
       console.error('Auto assign error:', err);
@@ -339,7 +254,25 @@ const AdminDashboard = () => {
     );
   };
 
-  const totalPending = Object.values(pendingCounts).reduce((sum, count) => sum + count, 0);
+  const handleSelectMentor = (mentor) => {
+    setSelectedMentor(mentor);
+    setPage(1);
+    setSearchTerm('');
+    setSelectedTier('ALL');
+    setSelectedStudentIds([]);
+    // Set default reassign target to first mentor of current year
+    const currentYearMentors = activeTab === 'cohorts_2nd' ? mentors2nd : mentors3rd;
+    if (currentYearMentors.length > 0) {
+      setAssignTargetMentor(currentYearMentors[0].id_number);
+    }
+  };
+
+  const handleBackToMentors = () => {
+    setSelectedMentor(null);
+    setSelectedStudentIds([]);
+    setStudents([]);
+    loadAllMentors();
+  };
 
   const parametersList = [
     { id: 'project', name: 'Project / Publication / Patent', max: 30, strategy: 'Group by distinct entity, MAX stage, SUM capped at 30' },
@@ -356,20 +289,10 @@ const AdminDashboard = () => {
     { id: 'language', name: 'Foreign Language Certification', max: 15, strategy: 'Max proficiency level achieved (A1=7, A2=12, B1=15)' },
   ];
 
-  const handleSelectMentor = (mentor) => {
-    setSelectedMentor(mentor);
-    setPage(1);
-    setSearchTerm('');
-    setSelectedTier('ALL');
-    setSelectedStudentIds([]);
-  };
+  const total3rdYearMentees = mentors3rd.reduce((sum, m) => sum + (m.assigned_count || 0), 0);
+  const total2ndYearMentees = mentors2nd.reduce((sum, m) => sum + (m.assigned_count || 0), 0);
 
-  const handleBackToMentors = () => {
-    setSelectedMentor(null);
-    setSelectedStudentIds([]);
-    setStudents([]);
-    loadMentors();
-  };
+  const currentMentorsList = activeTab === 'cohorts_2nd' ? mentors2nd : mentors3rd;
 
   return (
     <div className="admin-dashboard">
@@ -379,108 +302,136 @@ const AdminDashboard = () => {
         <div className="admin-header">
           <div>
             <h1>⚙️ Admin Control & Academic Center</h1>
-            <p>Supervise student readiness scores (250 marks), mentor allocations, and fraud anomaly detection</p>
+            <p>Supervise student readiness scores (250 marks), mentor allocations, and cohort matrices partitioned by academic year</p>
           </div>
         </div>
 
-        {/* Tab Navigation */}
+        {/* Tab Navigation: Dedicated 3rd Year and 2nd Year Tabs */}
         <div className="admin-tabs">
           <button
-            className={`tab-btn ${activeTab === 'mentors' ? 'active' : ''}`}
-            onClick={() => { setActiveTab('mentors'); setSelectedMentor(null); }}
+            className={`tab-btn tab-3rd ${activeTab === 'cohorts_3rd' ? 'active' : ''}`}
+            onClick={() => handleTabChange('cohorts_3rd')}
           >
-            👥 Mentors & Cohorts ({mentors.length})
+            📙 3rd Year Cohorts (2028 Batch)
+            <span className="tab-pill tab-pill-3rd">{total3rdYearMentees.toLocaleString()} Students</span>
+          </button>
+          <button
+            className={`tab-btn tab-2nd ${activeTab === 'cohorts_2nd' ? 'active' : ''}`}
+            onClick={() => handleTabChange('cohorts_2nd')}
+          >
+            📘 2nd Year Cohorts (2029 Batch)
+            <span className="tab-pill tab-pill-2nd">{total2ndYearMentees.toLocaleString()} Students</span>
           </button>
           <button
             className={`tab-btn ${activeTab === 'uploader' ? 'active' : ''}`}
-            onClick={() => setActiveTab('uploader')}
+            onClick={() => handleTabChange('uploader')}
           >
             📥 Batch Score Uploader
           </button>
           <button
             className={`tab-btn ${activeTab === 'parameters' ? 'active' : ''}`}
-            onClick={() => setActiveTab('parameters')}
+            onClick={() => handleTabChange('parameters')}
           >
             ⚖️ 12-Parameter Rules (250 Marks)
           </button>
         </div>
 
-        {/* TAB: MENTORS & COHORTS */}
-        {activeTab === 'mentors' && (
+        {/* ============================================================ */}
+        {/* TAB: 3RD YEAR OR 2ND YEAR COHORTS                            */}
+        {/* ============================================================ */}
+        {(activeTab === 'cohorts_3rd' || activeTab === 'cohorts_2nd') && (
           <div className="tab-content">
             {!selectedMentor ? (
-              /* VIEW A: MENTOR DIRECTORY */
+              /* VIEW A: MENTOR DIRECTORY FOR SELECTED YEAR */
               <div>
                 <div className="section-header-row">
                   <div>
-                    <h2>👥 Faculty Mentors & Student Cohorts</h2>
-                    <p>Click on any mentor to inspect their assigned mentees, student scores, and progress matrix</p>
+                    <div className="year-title-badge-wrapper">
+                      <span className={`year-hero-badge ${activeTab === 'cohorts_2nd' ? 'hero-year-2' : 'hero-year-3'}`}>
+                        {activeTab === 'cohorts_2nd' ? '📘 2nd Year · 2029 Batch' : '📙 3rd Year · 2028 Batch'}
+                      </span>
+                      <h2>
+                        {activeTab === 'cohorts_2nd' ? '2nd Year Faculty Mentors & Student Cohorts' : '3rd Year Faculty Mentors & Student Cohorts'}
+                      </h2>
+                    </div>
+                    <p>Click on any faculty mentor card below to inspect their assigned mentees, student scores, and cohort performance matrix</p>
                   </div>
                   <button 
                     className="primary-btn"
-                    onClick={handleAutoAssignByDept}
+                    onClick={() => handleAutoAssign(activeTab === 'cohorts_2nd' ? 2 : 3)}
                     disabled={assignLoading}
                   >
-                    ⚡ Auto-Assign All Unassigned Students by Dept
+                    ⚡ Auto-Assign {activeTab === 'cohorts_2nd' ? '2nd Year' : '3rd Year'} Students by Dept
                   </button>
                 </div>
 
-                <div className="mentors-grid">
-                  {mentors.map((m) => (
-                    <div 
-                      key={m.id_number} 
-                      className="mentor-card clickable-mentor-card"
-                      onClick={() => handleSelectMentor(m)}
-                    >
-                      <div className="mentor-header">
-                        <div className="mentor-avatar">👨‍🏫</div>
-                        <div>
-                          <h3>{m.name}</h3>
-                          <span className="mentor-dept-tag">Dept: {m.department || 'General'}</span>
+                {mentorsLoading ? (
+                  <div className="table-loading">Loading faculty mentors...</div>
+                ) : (
+                  <div className="mentors-grid">
+                    {currentMentorsList.map((m) => (
+                      <div 
+                        key={m.id_number} 
+                        className={`mentor-card clickable-mentor-card ${activeTab === 'cohorts_2nd' ? 'card-year-2' : 'card-year-3'}`}
+                        onClick={() => handleSelectMentor(m)}
+                      >
+                        <div className="mentor-header">
+                          <div className="mentor-avatar">👨‍🏫</div>
+                          <div>
+                            <h3>{m.name}</h3>
+                            <span className="mentor-dept-tag">Dept: {m.department || 'General'}</span>
+                          </div>
+                        </div>
+                        <div className="mentor-body">
+                          <p className="mentor-email">✉️ {m.email}</p>
+                          <p className="mentor-id">ID: <code>{m.id_number}</code></p>
+                          <div className="mentor-load-badge">
+                            <span className="load-num">{m.assigned_count}</span>
+                            <span className="load-label">
+                              {activeTab === 'cohorts_2nd' ? '2nd Yr Mentees' : '3rd Yr Mentees'}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="mentor-footer">
+                          <button 
+                            className="view-btn primary-action"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSelectMentor(m);
+                            }}
+                          >
+                            View {activeTab === 'cohorts_2nd' ? '2nd Yr' : '3rd Yr'} Cohort ({m.assigned_count}) →
+                          </button>
                         </div>
                       </div>
-                      <div className="mentor-body">
-                        <p className="mentor-email">✉️ {m.email}</p>
-                        <p className="mentor-id">ID: <code>{m.id_number}</code></p>
-                        <div className="mentor-load-badge">
-                          <span className="load-num">{m.assigned_count}</span>
-                          <span className="load-label">Assigned Mentees</span>
-                        </div>
-                      </div>
-                      <div className="mentor-footer">
-                        <button 
-                          className="view-btn primary-action"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleSelectMentor(m);
-                          }}
-                        >
-                          View Cohort Students ({m.assigned_count}) →
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ) : (
-              /* VIEW B: DEDICATED MENTOR COHORT VIEW */
+              /* VIEW B: DEDICATED MENTOR COHORT MATRIX */
               <div className="cohort-detail-view">
                 {/* Cohort Header Banner */}
-                <div className="cohort-header-banner">
+                <div className={`cohort-header-banner ${activeTab === 'cohorts_2nd' ? 'banner-year-2' : 'banner-year-3'}`}>
                   <button 
                     className="back-btn"
                     onClick={handleBackToMentors}
                   >
-                    ← Back to All Mentors
+                    ← Back to {activeTab === 'cohorts_2nd' ? '2nd Year' : '3rd Year'} Mentors
                   </button>
                   <div className="cohort-header-info">
                     <div className="cohort-avatar">👨‍🏫</div>
                     <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                        <span className={`year-pill ${activeTab === 'cohorts_2nd' ? 'year-2' : 'year-3'}`}>
+                          {activeTab === 'cohorts_2nd' ? '2nd Year (2029 Batch)' : '3rd Year (2028 Batch)'}
+                        </span>
+                      </div>
                       <h2>{selectedMentor.name} — Student Cohort</h2>
                       <p>
                         <strong>Department:</strong> {selectedMentor.department || 'General'} &nbsp;|&nbsp; 
                         <strong>Mentor ID:</strong> <code>{selectedMentor.id_number}</code> &nbsp;|&nbsp; 
-                        <strong>Total Mentees:</strong> {pagination.total} students
+                        <strong>Total Cohort Mentees:</strong> {pagination.total} students
                       </p>
                     </div>
                   </div>
@@ -523,28 +474,13 @@ const AdminDashboard = () => {
                       <span className="stat-label">Level 1 (80-119)</span>
                     </div>
                   </div>
-                </div>
-
-                {/* Batch Year Switcher Tabs */}
-                <div className="batch-year-tabs">
-                  <button
-                    className={`batch-year-btn ${selectedYear === 'ALL' ? 'active' : ''}`}
-                    onClick={() => { setSelectedYear('ALL'); setPage(1); }}
-                  >
-                    🎓 All Batches
-                  </button>
-                  <button
-                    className={`batch-year-btn year-2-tab ${selectedYear === '2' ? 'active' : ''}`}
-                    onClick={() => { setSelectedYear('2'); setPage(1); }}
-                  >
-                    📘 2nd Year (2029 Batch)
-                  </button>
-                  <button
-                    className={`batch-year-btn year-3-tab ${selectedYear === '3' ? 'active' : ''}`}
-                    onClick={() => { setSelectedYear('3'); setPage(1); }}
-                  >
-                    📙 3rd Year (2028 Batch)
-                  </button>
+                  <div className="stat-card orange">
+                    <div className="stat-icon">📊</div>
+                    <div className="stat-info">
+                      <span className="stat-value">{scoreStats?.avg_score || 0}</span>
+                      <span className="stat-label">Average Score</span>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Filter & Batch Action Toolbar */}
@@ -557,17 +493,6 @@ const AdminDashboard = () => {
                       onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
                       className="search-input"
                     />
-
-                    <select 
-                      value={selectedYear} 
-                      onChange={(e) => { setSelectedYear(e.target.value); setPage(1); }}
-                      className="filter-select"
-                      style={{ fontWeight: 600 }}
-                    >
-                      <option value="ALL">🎓 All Years / Batches</option>
-                      <option value="2">📘 2nd Year (2029 Batch)</option>
-                      <option value="3">📙 3rd Year (2028 Batch)</option>
-                    </select>
 
                     <select 
                       value={selectedTier} 
@@ -593,7 +518,7 @@ const AdminDashboard = () => {
                       onChange={(e) => setAssignTargetMentor(e.target.value)}
                       className="filter-select"
                     >
-                      {mentors.map(m => (
+                      {currentMentorsList.map(m => (
                         <option key={m.id_number} value={m.id_number}>
                           Reassign to: {m.name}
                         </option>
@@ -618,9 +543,9 @@ const AdminDashboard = () => {
                 {/* Students Table */}
                 <div className="admin-table-container">
                   {scoreLoading ? (
-                    <div className="table-loading">Loading {selectedMentor.name}'s students...</div>
+                    <div className="table-loading">Loading {selectedMentor.name}'s cohort students...</div>
                   ) : students.length === 0 ? (
-                    <div className="empty-state">No students found matching the filters for this mentor.</div>
+                    <div className="empty-state">No students found matching the filters for this mentor cohort.</div>
                   ) : (
                     <table className="score-matrix-table">
                       <thead>
@@ -633,7 +558,7 @@ const AdminDashboard = () => {
                             />
                           </th>
                           <th>Student Info</th>
-                          <th>Batch / Year</th>
+                          <th>Academic Year</th>
                           <th>Dept</th>
                           <th>100D</th>
                           <th>Lang</th>
@@ -746,18 +671,22 @@ const AdminDashboard = () => {
           </div>
         )}
 
-        {/* TAB 3: UPLOADER */}
+        {/* ============================================================ */}
+        {/* TAB: BATCH SCORE UPLOADER                                    */}
+        {/* ============================================================ */}
         {activeTab === 'uploader' && (
           <div className="tab-content">
             <div className="uploader-card">
               <h2>📥 Ingest Monthly Coding Assessment Data</h2>
-              <p>Upload the official Department Excel (.xlsx) file containing student assessment marks</p>
+              <p>Upload the official Department Excel (.xlsx) file containing student assessment marks for 2nd or 3rd year</p>
 
               <form onSubmit={handleFileUpload} className="upload-form">
                 <div className="form-group">
                   <label>Select Semester:</label>
                   <select value={semester} onChange={(e) => setSemester(Number(e.target.value))}>
-                    {[1, 2, 3, 4, 5, 6, 7, 8].map(s => (
+                    <option value={3}>Semester 3 (2nd Year · 2029 Batch)</option>
+                    <option value={5}>Semester 5 (3rd Year · 2028 Batch)</option>
+                    {[1, 2, 4, 6, 7, 8].map(s => (
                       <option key={s} value={s}>Semester {s}</option>
                     ))}
                   </select>
@@ -769,7 +698,7 @@ const AdminDashboard = () => {
                     type="text"
                     value={month}
                     onChange={(e) => setMonth(e.target.value)}
-                    placeholder="e.g., September 2026"
+                    placeholder="e.g., August 2026 / September 2026"
                   />
                 </div>
 
@@ -826,9 +755,9 @@ const AdminDashboard = () => {
           </div>
         )}
 
-
-
-        {/* TAB 5: 12-PARAMETER REFERENCE */}
+        {/* ============================================================ */}
+        {/* TAB: 12-PARAMETER REFERENCE                                  */}
+        {/* ============================================================ */}
         {activeTab === 'parameters' && (
           <div className="tab-content">
             <div className="parameters-table-container">
@@ -855,7 +784,9 @@ const AdminDashboard = () => {
           </div>
         )}
 
-        {/* MODAL: STUDENT DETAILED SCORECARD */}
+        {/* ============================================================ */}
+        {/* MODAL: STUDENT DETAILED SCORECARD                            */}
+        {/* ============================================================ */}
         {selectedStudentForModal && (
           <div className="modal-backdrop" onClick={() => setSelectedStudentForModal(null)}>
             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -868,7 +799,9 @@ const AdminDashboard = () => {
                     Dept: <strong>{selectedStudentForModal.department}</strong>
                   </p>
                   <p>
-                    Assigned Mentor: <strong>{selectedStudentForModal.assigned_mentor_name}</strong>
+                    Batch: <span className={`year-pill ${selectedStudentForModal.year === 2 ? 'year-2' : 'year-3'}`} style={{ display: 'inline-block', margin: '2px 0' }}>
+                      {selectedStudentForModal.batch_label || (selectedStudentForModal.year === 2 ? '2nd Year (2029 Batch)' : '3rd Year (2028 Batch)')}
+                    </span> | Assigned Mentor: <strong>{selectedStudentForModal.assigned_mentor_name}</strong>
                   </p>
                 </div>
                 <button className="close-btn" onClick={() => setSelectedStudentForModal(null)}>✕</button>
