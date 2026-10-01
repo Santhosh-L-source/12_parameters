@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import Header from '../../components/Header';
 import FileUpload from '../../components/FileUpload';
+import DocumentViewerModal from '../../components/DocumentViewerModal';
 import { moduleAPI } from '../../services/api';
 import { getStudent } from '../../utils/auth';
 import './Competition.css';
@@ -26,6 +27,7 @@ const Certificate = () => {
   const [evidenceList, setEvidenceList] = useState([]);
   const [alert, setAlert] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [previewDoc, setPreviewDoc] = useState(null);
 
   useEffect(() => {
     loadData();
@@ -241,6 +243,7 @@ const Certificate = () => {
                   <th>Credential Name</th>
                   <th>Category</th>
                   <th>Tier</th>
+                  <th>Proof / Document</th>
                   <th>Status</th>
                 </tr>
               </thead>
@@ -250,6 +253,29 @@ const Certificate = () => {
                     <td><strong>{item.credential_name}</strong></td>
                     <td>{item.credential_category}</td>
                     <td>{item.tier_level}</td>
+                    <td>
+                      {item.certificate_url ? (
+                        <button
+                          type="button"
+                          className="view-btn-sm"
+                          style={{
+                            padding: '0.35rem 0.75rem',
+                            background: '#eff6ff',
+                            color: '#1d4ed8',
+                            border: '1px solid #bfdbfe',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontWeight: 600,
+                            fontSize: '0.8rem'
+                          }}
+                          onClick={() => setPreviewDoc({ url: item.certificate_url, title: item.credential_name })}
+                        >
+                          📄 View Certificate
+                        </button>
+                      ) : (
+                        <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>No proof attached</span>
+                      )}
+                    </td>
                     <td>
                       <span className={`status-badge status-${(item.status || 'pending').toLowerCase()}`}>
                         {item.status || 'PENDING'}
@@ -261,6 +287,16 @@ const Certificate = () => {
             </table>
           )}
         </div>
+
+        {/* Document Viewer Modal */}
+        {previewDoc && (
+          <DocumentViewerModal
+            isOpen={!!previewDoc}
+            onClose={() => setPreviewDoc(null)}
+            docUrl={previewDoc.url}
+            title={previewDoc.title}
+          />
+        )}
       </div>
     </div>
   );

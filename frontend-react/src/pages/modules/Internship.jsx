@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import Header from '../../components/Header';
 import FileUpload from '../../components/FileUpload';
+import DocumentViewerModal from '../../components/DocumentViewerModal';
 import { moduleAPI } from '../../services/api';
 import { getStudent } from '../../utils/auth';
 import './Competition.css';
@@ -24,6 +25,7 @@ const Internship = () => {
   const [evidenceList, setEvidenceList] = useState([]);
   const [alert, setAlert] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [previewDoc, setPreviewDoc] = useState(null);
 
   useEffect(() => {
     loadData();
@@ -231,25 +233,62 @@ const Internship = () => {
                 <tr>
                   <th>Organization</th>
                   <th>Stage</th>
+                  <th>Proof / Document</th>
                   <th>Status</th>
                 </tr>
               </thead>
               <tbody>
-                {evidenceList.map((item) => (
-                  <tr key={item.id}>
-                    <td><strong>{item.company_name || item.startup_name}</strong></td>
-                    <td>{(item.recruitment_stage || item.startup_stage || '-').replace(/_/g, ' ')}</td>
-                    <td>
-                      <span className={`status-badge status-${(item.status || 'pending').toLowerCase()}`}>
-                        {item.status || 'PENDING'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                {evidenceList.map((item) => {
+                  const proof = item.offer_letter_url || item.completion_certificate_url || item.certificate_url;
+                  return (
+                    <tr key={item.id}>
+                      <td><strong>{item.company_name || item.startup_name}</strong></td>
+                      <td>{(item.recruitment_stage || item.startup_stage || '-').replace(/_/g, ' ')}</td>
+                      <td>
+                        {proof ? (
+                          <button
+                            type="button"
+                            className="view-btn-sm"
+                            style={{
+                              padding: '0.35rem 0.75rem',
+                              background: '#eff6ff',
+                              color: '#1d4ed8',
+                              border: '1px solid #bfdbfe',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              fontWeight: 600,
+                              fontSize: '0.8rem'
+                            }}
+                            onClick={() => setPreviewDoc({ url: proof, title: `${item.company_name || item.startup_name} Proof` })}
+                          >
+                            📄 View Document
+                          </button>
+                        ) : (
+                          <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>No proof attached</span>
+                        )}
+                      </td>
+                      <td>
+                        <span className={`status-badge status-${(item.status || 'pending').toLowerCase()}`}>
+                          {item.status || 'PENDING'}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
         </div>
+
+        {/* Document Viewer Modal */}
+        {previewDoc && (
+          <DocumentViewerModal
+            isOpen={!!previewDoc}
+            onClose={() => setPreviewDoc(null)}
+            docUrl={previewDoc.url}
+            title={previewDoc.title}
+          />
+        )}
       </div>
     </div>
   );

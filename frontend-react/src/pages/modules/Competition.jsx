@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../../components/Header';
 import FileUpload from '../../components/FileUpload';
+import DocumentViewerModal from '../../components/DocumentViewerModal';
 import { moduleAPI } from '../../services/api';
 import { getStudent } from '../../utils/auth';
 import './Competition.css';
@@ -29,6 +30,7 @@ const Competition = () => {
   const [evidence, setEvidence] = useState([]);
   const [alert, setAlert] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [previewDoc, setPreviewDoc] = useState(null);
 
   useEffect(() => {
     loadEvidence();
@@ -67,11 +69,10 @@ const Competition = () => {
         loadEvidence();
         loadStats();
       } else {
-        const errorMsg = data.message || (data.errors && data.errors.map(e => e.msg).join(', ')) || data.error || 'Submission failed';
-        showAlert(errorMsg, 'error');
+        showAlert(data.message || 'Submission failed', 'error');
       }
     } catch (error) {
-      showAlert(error.message || 'Network error. Please try again.', 'error');
+      showAlert('Network error. Please try again.', 'error');
     } finally {
       setLoading(false);
     }
@@ -80,7 +81,9 @@ const Competition = () => {
   const loadEvidence = async () => {
     try {
       const data = await moduleAPI.getCompetitionEvidence(student.roll_number);
-      setEvidence(data.evidence || []);
+      if (data.evidence) {
+        setEvidence(data.evidence);
+      }
     } catch (error) {
       console.error('Error loading evidence:', error);
     }
@@ -88,18 +91,15 @@ const Competition = () => {
 
   const loadStats = async () => {
     try {
-      const [evidenceData, marksData] = await Promise.all([
-        moduleAPI.getCompetitionEvidence(student.roll_number),
-        moduleAPI.getCompetitionMarks(student.roll_number),
-      ]);
-
-      const evidenceList = evidenceData.evidence || [];
-      setStats({
-        totalEvents: evidenceList.length,
-        verified: evidenceList.filter((e) => e.status === 'VERIFIED').length,
-        pending: evidenceList.filter((e) => e.status === 'PENDING').length,
-        marks: marksData.marks || 0,
-      });
+      const data = await moduleAPI.getCompetitionMarks(student.roll_number);
+      if (data) {
+        setStats({
+          totalEvents: data.total_events || 0,
+          verified: data.verified_count || 0,
+          pending: data.pending_count || 0,
+          marks: data.marks || 0,
+        });
+      }
     } catch (error) {
       console.error('Error loading stats:', error);
     }
@@ -110,23 +110,23 @@ const Competition = () => {
       <Header />
       <div className="container">
         <div className="breadcrumb">
-          <a href="#" onClick={(e) => { e.preventDefault(); navigate('/dashboard'); }}>
-            Dashboard
-          </a>{' '}
-          / Competition Achievement
+          <a href="/dashboard">Dashboard</a> / Hackathons & Competitions
         </div>
 
-        <h1 className="page-title">
-          <span>🏆</span>
-          Competition Achievement
-        </h1>
+        <div className="page-title">
+          <span>🏆</span> Hackathons & Competitions
+        </div>
 
         {alert && (
           <div className={`alert alert-${alert.type}`}>{alert.message}</div>
         )}
 
         <div className="form-card">
-          <h3>Submit New Evidence</h3>
+          <div className="card-header">
+            <h3>Submit Competition Evidence</h3>
+            <span className="badge">Max 20 Marks</span>
+          </div>
+
           <form onSubmit={handleSubmit}>
             <div className="form-grid">
               <div className="form-group">
@@ -137,13 +137,13 @@ const Competition = () => {
                   onChange={(e) =>
                     setFormData({ ...formData, eventName: e.target.value })
                   }
+                  placeholder="e.g. Smart India Hackathon 2024"
                   required
-                  placeholder="e.g. Smart India Hackathon"
                   disabled={loading}
                 />
               </div>
               <div className="form-group">
-                <label>Round Cleared *</label>
+                <label>Round / Level Cleared *</label>
                 <select
                   value={formData.roundCleared}
                   onChange={(e) =>
@@ -152,37 +152,32 @@ const Competition = () => {
                   required
                   disabled={loading}
                 >
-                  <option value="">Select Round</option>
-                  <option value="VALID_COMPLETION">
-                    Valid Completion (2 marks)
-                  </option>
-                  <option value="PRELIM">Preliminary (4 marks)</option>
-                  <option value="SECOND_ROUND">Second Round (6 marks)</option>
-                  <option value="REGIONAL_FINALIST">
-                    Regional Finalist (10 marks)
-                  </option>
-                  <option value="NATIONAL_FINALIST">
-                    National Finalist (15 marks)
-                  </option>
-                  <option value="INTERNATIONAL_WINNER">
-                    International Winner (20 marks)
-                  </option>
+                  <option value="">Select Level</option>
+                  <option value="INTERNAL_HACKATHON">Internal Hackathon (3 Marks)</option>
+                  <option value="PRELIMINARY_STAGE">Preliminary Stage (5 Marks)</option>
+                  <option value="PRE_FINALS">Pre-Finals (10 Marks)</option>
+                  <option value="FINALS">Finals / Grand Finale (15 Marks)</option>
+                  <option value="WINNER">Winner / Top 3 (20 Marks)</option>
                 </select>
               </div>
               <div className="form-group">
                 <label>Competition Type</label>
-                <input
-                  type="text"
+                <select
                   value={formData.competitionType}
                   onChange={(e) =>
                     setFormData({ ...formData, competitionType: e.target.value })
                   }
-                  placeholder="e.g. HACKATHON"
                   disabled={loading}
-                />
+                >
+                  <option value="">Select Type</option>
+                  <option value="HACKATHON">Hackathon</option>
+                  <option value="CODING_CONTEST">Coding Contest</option>
+                  <option value="IDEATHON">Ideathon</option>
+                  <option value="PROJECT_EXPO">Project Expo</option>
+                </select>
               </div>
               <div className="form-group">
-                <label>Organizer</label>
+                <label>Organizing Body / Institution</label>
                 <input
                   type="text"
                   value={formData.organizer}
@@ -214,7 +209,7 @@ const Competition = () => {
             </div>
             <button type="submit" className="submit-btn" disabled={loading}>
               <span>🚀</span>
-              {loading ? 'Submitting...' : 'Submit & Fetch'}
+              {loading ? 'Submitting...' : 'Submit Evidence'}
             </button>
           </form>
         </div>
@@ -269,6 +264,7 @@ const Competition = () => {
                   <th>EVENT NAME</th>
                   <th>ROUND CLEARED</th>
                   <th>MARKS</th>
+                  <th>PROOF</th>
                   <th>STATUS</th>
                   <th>SUBMITTED</th>
                 </tr>
@@ -276,7 +272,7 @@ const Competition = () => {
               <tbody>
                 {evidence.length === 0 ? (
                   <tr>
-                    <td colSpan="5" style={{ textAlign: 'center', color: '#6b7280', padding: '40px' }}>
+                    <td colSpan="6" style={{ textAlign: 'center', color: '#6b7280', padding: '40px' }}>
                       No evidence submitted yet
                     </td>
                   </tr>
@@ -286,12 +282,35 @@ const Competition = () => {
                       <td>
                         <strong>{e.event_name}</strong>
                       </td>
-                      <td>{e.round_cleared.replace(/_/g, ' ')}</td>
+                      <td>{(e.round_cleared || '').replace(/_/g, ' ')}</td>
                       <td>
                         <strong>{e.stage_marks}</strong>
                       </td>
                       <td>
-                        <span className={`status-badge status-${e.status.toLowerCase()}`}>
+                        {e.certificate_url || e.proof_url ? (
+                          <button
+                            type="button"
+                            className="view-btn-sm"
+                            style={{
+                              padding: '0.35rem 0.75rem',
+                              background: '#eff6ff',
+                              color: '#1d4ed8',
+                              border: '1px solid #bfdbfe',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              fontWeight: 600,
+                              fontSize: '0.8rem'
+                            }}
+                            onClick={() => setPreviewDoc({ url: e.certificate_url || e.proof_url, title: `${e.event_name} Proof` })}
+                          >
+                            📄 View Proof
+                          </button>
+                        ) : (
+                          <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>No proof attached</span>
+                        )}
+                      </td>
+                      <td>
+                        <span className={`status-badge status-${(e.status || 'pending').toLowerCase()}`}>
                           {e.status}
                         </span>
                       </td>
@@ -303,6 +322,16 @@ const Competition = () => {
             </table>
           </div>
         </div>
+
+        {/* Document Viewer Modal */}
+        {previewDoc && (
+          <DocumentViewerModal
+            isOpen={!!previewDoc}
+            onClose={() => setPreviewDoc(null)}
+            docUrl={previewDoc.url}
+            title={previewDoc.title}
+          />
+        )}
       </div>
     </div>
   );

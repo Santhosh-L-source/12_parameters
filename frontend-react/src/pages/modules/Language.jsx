@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import Header from '../../components/Header';
 import FileUpload from '../../components/FileUpload';
+import DocumentViewerModal from '../../components/DocumentViewerModal';
 import { moduleAPI } from '../../services/api';
 import { getStudent } from '../../utils/auth';
 import './Competition.css';
@@ -24,6 +25,7 @@ const Language = () => {
   const [evidenceList, setEvidenceList] = useState([]);
   const [alert, setAlert] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [previewDoc, setPreviewDoc] = useState(null);
 
   useEffect(() => {
     loadData();
@@ -102,7 +104,7 @@ const Language = () => {
         <div className="stats-grid">
           <div className="stat-card">
             <div className="stat-value">{stats.marks} / 15</div>
-            <div className="stat-label">Total Marks (Max Tier)</div>
+            <div className="stat-label">Total Marks (Max Level)</div>
           </div>
           <div className="stat-card">
             <div className="stat-value">{stats.totalSubmissions}</div>
@@ -112,69 +114,70 @@ const Language = () => {
 
         {/* Scoring Guide */}
         <div className="form-card" style={{ marginBottom: '24px' }}>
-          <h3>📋 Scoring Reference (Non-English, Highest Level Counts)</h3>
+          <h3>📋 Scoring Reference</h3>
           <div className="scoring-tier-grid">
             <div className="scoring-tier-item" style={{ background: '#f0fdf4', borderLeft: '5px solid #10b981' }}>
               <strong>15 Marks</strong>
-              <span>B1 Level or Higher (Advanced)</span>
+              <span>B1 Level or Higher (Professional Working)</span>
+            </div>
+            <div className="scoring-tier-item" style={{ background: '#f5f3ff', borderLeft: '5px solid #8b5cf6' }}>
+              <strong>12 Marks</strong>
+              <span>A2 Level (Elementary Proficiency)</span>
             </div>
             <div className="scoring-tier-item" style={{ background: '#f0f9ff', borderLeft: '5px solid #3b82f6' }}>
-              <strong>12 Marks</strong>
-              <span>A2 Level (Intermediate)</span>
-            </div>
-            <div className="scoring-tier-item" style={{ background: '#fef3c7', borderLeft: '5px solid #f59e0b' }}>
               <strong>7 Marks</strong>
-              <span>A1 Level (Elementary)</span>
+              <span>A1 Level (Beginner / Breakthrough)</span>
             </div>
           </div>
         </div>
 
         {/* Form */}
         <div className="form-card">
-          <h3>Submit Language Certification</h3>
+          <h3>Submit Foreign Language Certification</h3>
           <form onSubmit={handleSubmit}>
             <div className="form-grid">
               <div className="form-group">
-                <label htmlFor="language">Foreign Language *</label>
+                <label htmlFor="language">Language *</label>
                 <select
                   id="language"
                   value={formData.language}
                   onChange={(e) => setFormData({ ...formData, language: e.target.value })}
                   required
                 >
-                  <option value="German">German</option>
-                  <option value="French">French</option>
-                  <option value="Japanese">Japanese</option>
-                  <option value="Spanish">Spanish</option>
-                  <option value="Mandarin">Mandarin</option>
-                  <option value="Korean">Korean</option>
-                  <option value="Russian">Russian</option>
-                  <option value="Italian">Italian</option>
+                  <option value="German">German (Goethe-Zertifikat / TestDaF)</option>
+                  <option value="Japanese">Japanese (JLPT N5-N1)</option>
+                  <option value="French">French (DELF / DALF)</option>
+                  <option value="Spanish">Spanish (DELE / SIELE)</option>
+                  <option value="Mandarin">Mandarin Chinese (HSK)</option>
+                  <option value="Korean">Korean (TOPIK)</option>
+                  <option value="Other">Other International Language</option>
                 </select>
               </div>
 
               <div className="form-group">
-                <label htmlFor="proficiencyLevel">Proficiency Level *</label>
+                <label htmlFor="proficiencyLevel">Proficiency Level Achieved *</label>
                 <select
                   id="proficiencyLevel"
                   value={formData.proficiencyLevel}
                   onChange={(e) => setFormData({ ...formData, proficiencyLevel: e.target.value })}
                   required
                 >
-                  <option value="A1">A1 (7 Marks)</option>
-                  <option value="A2">A2 (12 Marks)</option>
-                  <option value="B1">B1 (15 Marks)</option>
+                  <option value="A1">A1 Level (Beginner — 7 Marks)</option>
+                  <option value="A2">A2 Level (Elementary — 12 Marks)</option>
+                  <option value="B1">B1 Level (Intermediate — 15 Marks)</option>
+                  <option value="B2">B2 Level (Upper Intermediate — 15 Marks)</option>
+                  <option value="C1">C1/C2 Level (Advanced / Mastery — 15 Marks)</option>
                 </select>
               </div>
 
-              <div className="form-group">
-                <label htmlFor="certificationName">Exam / Certification Name</label>
+              <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                <label htmlFor="certificationName">Certification Name / Test Details</label>
                 <input
                   type="text"
                   id="certificationName"
                   value={formData.certificationName}
                   onChange={(e) => setFormData({ ...formData, certificationName: e.target.value })}
-                  placeholder="e.g. Goethe-Zertifikat A1, DELF B1"
+                  placeholder="e.g. Goethe-Zertifikat A2, JLPT N4, DELF B1"
                 />
               </div>
 
@@ -205,6 +208,7 @@ const Language = () => {
                   <th>Language</th>
                   <th>Level</th>
                   <th>Certification</th>
+                  <th>Proof / Document</th>
                   <th>Status</th>
                   <th>Marks</th>
                 </tr>
@@ -215,6 +219,29 @@ const Language = () => {
                     <td><strong>{item.language}</strong></td>
                     <td>{item.proficiency_level}</td>
                     <td>{item.certification_name || '-'}</td>
+                    <td>
+                      {item.certificate_url ? (
+                        <button
+                          type="button"
+                          className="view-btn-sm"
+                          style={{
+                            padding: '0.35rem 0.75rem',
+                            background: '#eff6ff',
+                            color: '#1d4ed8',
+                            border: '1px solid #bfdbfe',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontWeight: 600,
+                            fontSize: '0.8rem'
+                          }}
+                          onClick={() => setPreviewDoc({ url: item.certificate_url, title: `${item.language} (${item.proficiency_level}) Certificate` })}
+                        >
+                          📄 View Document
+                        </button>
+                      ) : (
+                        <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>No proof attached</span>
+                      )}
+                    </td>
                     <td>
                       <span className={`status-badge status-${(item.status || 'pending').toLowerCase()}`}>
                         {item.status || 'PENDING'}
@@ -227,6 +254,16 @@ const Language = () => {
             </table>
           )}
         </div>
+
+        {/* Document Viewer Modal */}
+        {previewDoc && (
+          <DocumentViewerModal
+            isOpen={!!previewDoc}
+            onClose={() => setPreviewDoc(null)}
+            docUrl={previewDoc.url}
+            title={previewDoc.title}
+          />
+        )}
       </div>
     </div>
   );

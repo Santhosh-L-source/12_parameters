@@ -1,5 +1,6 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { uploadAPI, API_BASE_URL } from '../services/api';
+import DocumentViewerModal from './DocumentViewerModal';
 
 const FileUpload = ({
   label = 'Upload Proof Document (PDF or JPEG/PNG)',
@@ -11,11 +12,19 @@ const FileUpload = ({
 }) => {
   const [uploading, setUploading] = useState(false);
   const [fileInfo, setFileInfo] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState('');
   const [error, setError] = useState(null);
   const [dragActive, setDragActive] = useState(false);
+  const [isViewerOpen, setIsViewerOpen] = useState(false);
   const fileInputRef = useRef(null);
 
   const allowedExts = accept.split(',').map((e) => e.trim().toLowerCase());
+
+  useEffect(() => {
+    if (value && !previewUrl) {
+      setPreviewUrl(value);
+    }
+  }, [value]);
 
   const handleFile = async (file) => {
     if (!file) return;
@@ -35,17 +44,26 @@ const FileUpload = ({
       return;
     }
 
+    // Generate immediate client-side preview URL
+    try {
+      const localBlobUrl = URL.createObjectURL(file);
+      setPreviewUrl(localBlobUrl);
+    } catch (blobErr) {
+      console.warn('Blob preview warning:', blobErr);
+    }
+
     setUploading(true);
     try {
       const res = await uploadAPI.uploadFile(file);
       if (res.success && res.fileUrl) {
-        const fullUrl = res.fileUrl.startsWith('http') ? res.fileUrl : `${API_BASE_URL}${res.fileUrl}`;
+        const fullUrl = res.fileUrl;
         setFileInfo({
           name: file.name,
           size: (file.size / (1024 * 1024)).toFixed(2) + ' MB',
           type: file.type.includes('pdf') ? 'pdf' : 'image',
           url: fullUrl,
         });
+        setPreviewUrl(fullUrl);
         onChange(fullUrl);
       } else {
         setError(res.message || 'Upload failed. Please try again.');
@@ -79,13 +97,23 @@ const FileUpload = ({
   const handleRemove = (e) => {
     e.stopPropagation();
     setFileInfo(null);
+    setPreviewUrl('');
     setError(null);
     onChange('');
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const isPdf = value?.toLowerCase().endsWith('.pdf') || fileInfo?.type === 'pdf';
-  const hasValue = !!value;
+  const activeDocUrl = previewUrl || value;
+  const isPdf = activeDocUrl?.toLowerCase().includes('.pdf') || 
+                activeDocUrl?.startsWith('data:application/pdf') || 
+                fileInfo?.type === 'pdf';
+  const hasValue = !!activeDocUrl;
+
+  const handleOpenPreview = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsViewerOpen(true);
+  };
 
   return (
     <div style={{ marginBottom: '1.25rem', width: '100%' }}>
@@ -127,15 +155,15 @@ const FileUpload = ({
 
         {uploading ? (
           <div style={{ padding: '0.75rem 0', color: '#4f46e5', fontWeight: 600, fontSize: '0.9rem' }}>
-            ⏳ Uploading document, please wait...
+            ⏳ Uploading & validating document, please wait...
           </div>
         ) : hasValue ? (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', textAlign: 'left' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', textAlign: 'left', flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               <span style={{ fontSize: '1.75rem' }}>{isPdf ? '📄' : '🖼️'}</span>
               <div>
                 <div style={{ fontWeight: 600, color: '#166534', fontSize: '0.9rem', wordBreak: 'break-all' }}>
-                  {fileInfo?.name || value.split('/').pop()}
+                  {fileInfo?.name || (activeDocUrl.startsWith('data:') ? 'Document_Proof' : activeDocUrl.split('/').pop())}
                 </div>
                 <div style={{ fontSize: '0.75rem', color: '#15803d', marginTop: '2px' }}>
                   ✓ {isPdf ? 'PDF Document' : 'Image (JPEG/PNG)'} {fileInfo?.size && `• ${fileInfo.size}`} • Ready to Submit
@@ -144,33 +172,35 @@ const FileUpload = ({
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <a
-                href={value}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
+              <button
+                type="button"
+                onClick={handleOpenPreview}
                 style={{
-                  padding: '0.35rem 0.75rem',
+                  padding: '0.45rem 0.85rem',
                   background: '#dcfce7',
                   color: '#15803d',
+                  border: '1px solid #86efac',
                   borderRadius: '6px',
-                  fontSize: '0.8rem',
-                  fontWeight: 600,
-                  textDecoration: 'none',
+                  fontSize: '0.82rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px'
                 }}
               >
-                View ↗
-              </a>
+                🔍 View Document
+              </button>
               <button
                 type="button"
                 onClick={handleRemove}
                 style={{
                   background: '#fee2e2',
                   color: '#dc2626',
-                  border: 'none',
+                  border: '1px solid #fca5a5',
                   borderRadius: '6px',
-                  padding: '0.35rem 0.65rem',
-                  fontSize: '0.8rem',
+                  padding: '0.45rem 0.75rem',
+                  fontSize: '0.82rem',
                   fontWeight: 600,
                   cursor: 'pointer',
                 }}
@@ -197,6 +227,14 @@ const FileUpload = ({
           ⚠️ {error}
         </div>
       )}
+
+      {/* Embedded Document Viewer Modal */}
+      <DocumentViewerModal
+        isOpen={isViewerOpen}
+        onClose={() => setIsViewerOpen(false)}
+        docUrl={activeDocUrl}
+        title={fileInfo?.name || 'Uploaded Proof Document'}
+      />
     </div>
   );
 };

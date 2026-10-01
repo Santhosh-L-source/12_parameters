@@ -88,19 +88,53 @@ router.post('/', authenticate, (req, res) => {
       });
     }
 
-    // Build public file URL
-    const fileUrl = `/uploads/${req.file.filename}`;
+    // Read file buffer and generate persistent Data URI (never 404s on serverless)
+    let dataUri = '';
+    try {
+      if (req.file.path && fs.existsSync(req.file.path)) {
+        const fileBuffer = fs.readFileSync(req.file.path);
+        const base64Data = fileBuffer.toString('base64');
+        dataUri = `data:${req.file.mimetype || 'application/pdf'};base64,${base64Data}`;
+      }
+    } catch (readErr) {
+      console.warn('Error generating data URI for upload:', readErr.message);
+    }
+
+    // Build public file URL with fallback to dataUri
+    const localUrl = `/uploads/${req.file.filename}`;
+    const persistentUrl = dataUri || localUrl;
 
     res.json({
       success: true,
       message: 'File uploaded successfully',
-      fileUrl,
+      fileUrl: persistentUrl,
+      localUrl,
       fileName: req.file.filename,
       originalName: req.file.originalname,
       mimeType: req.file.mimetype,
       size: req.file.size
     });
   });
+});
+
+/**
+ * GET /api/upload/file/:filename
+ * Retrieve uploaded document directly
+ */
+router.get('/file/:filename', (req, res) => {
+  const { filename } = req.params;
+  const safeFilename = path.basename(filename);
+  const filePath1 = path.join(uploadDir, safeFilename);
+  const filePath2 = path.join(__dirname, '../../uploads', safeFilename);
+
+  let targetPath = null;
+  if (fs.existsSync(filePath1)) targetPath = filePath1;
+  else if (fs.existsSync(filePath2)) targetPath = filePath2;
+
+  if (targetPath) {
+    return res.sendFile(targetPath);
+  }
+  return res.status(404).json({ success: false, error: 'File not found' });
 });
 
 module.exports = router;
