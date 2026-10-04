@@ -393,8 +393,13 @@ async function emailScoresExport({ recipientEmail, semester, department }) {
     // Ignore if dotenv reload fails
   }
 
-  const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER;
-  const smtpPass = process.env.SMTP_PASS || process.env.EMAIL_PASSWORD;
+  const smtpUser = (process.env.SMTP_USER || process.env.EMAIL_USER || '').trim();
+  let smtpPass = (process.env.SMTP_PASS || process.env.EMAIL_PASSWORD || '').trim();
+
+  // If user provided Gmail App Password with spaces (e.g., 'abcd efgh ijkl mnop'), strip spaces automatically
+  if (smtpPass && (smtpPass.includes(' ') || smtpPass.length >= 16)) {
+    smtpPass = smtpPass.replace(/\s+/g, '');
+  }
 
   if (!smtpUser || !smtpPass) {
     throw new Error('SMTP credentials are not configured in backend/core/.env (or Vercel Environment Variables). Please configure SMTP_USER and SMTP_PASS (or EMAIL_USER and EMAIL_PASSWORD) to send emails, or use the direct "Download Scores Spreadsheet (.xlsx)" button.');
