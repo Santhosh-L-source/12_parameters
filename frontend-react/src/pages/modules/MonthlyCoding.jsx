@@ -161,7 +161,6 @@ const MonthlyCoding = () => {
                   <th>Semester</th>
                   <th>Platform / Exam</th>
                   <th>Score Percentage</th>
-                  <th>Problems Solved</th>
                   <th>Status</th>
                   <th>Recorded On</th>
                 </tr>
@@ -169,7 +168,7 @@ const MonthlyCoding = () => {
               <tbody>
                 {evidenceList.length === 0 ? (
                   <tr>
-                    <td colSpan="7" style={{ textAlign: 'center', padding: '40px 20px', color: '#64748b' }}>
+                    <td colSpan="6" style={{ textAlign: 'center', padding: '40px 20px', color: '#64748b' }}>
                       <div style={{ fontSize: '2rem', marginBottom: '8px' }}>📝</div>
                       <div style={{ fontWeight: 600, color: '#334155' }}>No monthly assessments recorded yet</div>
                       <div style={{ fontSize: '0.88rem', marginTop: '4px' }}>
@@ -191,11 +190,6 @@ const MonthlyCoding = () => {
                           <span style={{ fontWeight: 800, color: tierInfo.color, fontSize: '1.05rem' }}>
                             {item.percentage}%
                           </span>
-                        </td>
-                        <td>
-                          {item.problems_solved !== null && item.total_problems !== null
-                            ? `${item.problems_solved} / ${item.total_problems}`
-                            : '—'}
                         </td>
                         <td>
                           <span className={`status-badge status-${item.status.toLowerCase()}`}>

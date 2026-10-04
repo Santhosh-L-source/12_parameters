@@ -288,43 +288,6 @@ const MonthlyCodingReview = () => {
                 </select>
               </div>
 
-              <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
-                  Problems Solved / Total
-                </label>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <input
-                    type="number"
-                    min="0"
-                    placeholder="Solved"
-                    value={assignData.problemsSolved}
-                    onChange={(e) => setAssignData({ ...assignData, problemsSolved: e.target.value })}
-                    style={{
-                      flex: 1,
-                      padding: '10px 12px',
-                      borderRadius: '8px',
-                      border: '1px solid #cbd5e1',
-                      fontSize: '0.92rem',
-                    }}
-                  />
-                  <span>/</span>
-                  <input
-                    type="number"
-                    min="0"
-                    placeholder="Total"
-                    value={assignData.totalProblems}
-                    onChange={(e) => setAssignData({ ...assignData, totalProblems: e.target.value })}
-                    style={{
-                      flex: 1,
-                      padding: '10px 12px',
-                      borderRadius: '8px',
-                      border: '1px solid #cbd5e1',
-                      fontSize: '0.92rem',
-                    }}
-                  />
-                </div>
-              </div>
-
               <div style={{ gridColumn: 'span 2' }}>
                 <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
                   Platform / Assessment Name
@@ -413,14 +376,6 @@ const MonthlyCodingReview = () => {
                           {tier}
                         </span>
                       </div>
-                      {item.problems_solved !== null && item.total_problems !== null && (
-                        <div className="detail-row">
-                          <span className="label">Problems Solved:</span>
-                          <span className="value">
-                            {item.problems_solved} / {item.total_problems}
-                          </span>
-                        </div>
-                      )}
                       {item.platform && (
                         <div className="detail-row">
                           <span className="label">Platform:</span>
