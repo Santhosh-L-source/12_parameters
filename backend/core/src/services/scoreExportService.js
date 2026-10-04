@@ -21,15 +21,15 @@ const PARAMETER_LABELS = {
   coding_problems: 'Coding Problems (25)',
   cp_rating: 'CP Rating (20)',
   opensource: 'Open Source (20)',
-  competition: 'Competitions (20)',
+  competition: 'Competition (20)',
   internship: 'Internship (20)',
-  project: 'Project / Patent (30)',
+  project: 'Project (30)',
   language: 'Language (15)',
-  gate: 'GATE Exam (15)',
-  monthly_coding: 'Monthly Coding (30)',
-  hundred_days: '100 Days (20)',
-  aptitude: 'Aptitude (15)',
-  certificate: 'Certifications (20)'
+  gate: 'GATE (25)',
+  monthly_coding: 'Monthly Coding (20)',
+  hundred_days: '100 Days (15)',
+  aptitude: 'Aptitude (20)',
+  certificate: 'Certificate (20)'
 };
 
 /**
@@ -186,29 +186,29 @@ async function generateScoresWorkbook({ semester, department, search }) {
 
   // Define Columns
   worksheet.columns = [
-    { header: 'Roll Number', key: 'roll_number', width: 14 },
+    { header: 'Roll Number', key: 'roll_number', width: 16 },
     { header: 'Student Name', key: 'name', width: 28 },
-    { header: 'Department', key: 'department', width: 20 },
-    { header: 'Semester', key: 'semester', width: 11 },
-    { header: PARAMETER_LABELS.coding_problems, key: 'coding_problems', width: 18 },
-    { header: PARAMETER_LABELS.cp_rating, key: 'cp_rating', width: 15 },
-    { header: PARAMETER_LABELS.opensource, key: 'opensource', width: 16 },
-    { header: PARAMETER_LABELS.competition, key: 'competition', width: 17 },
-    { header: PARAMETER_LABELS.internship, key: 'internship', width: 16 },
-    { header: PARAMETER_LABELS.project, key: 'project', width: 19 },
-    { header: PARAMETER_LABELS.language, key: 'language', width: 15 },
-    { header: PARAMETER_LABELS.gate, key: 'gate', width: 15 },
-    { header: PARAMETER_LABELS.monthly_coding, key: 'monthly_coding', width: 18 },
-    { header: PARAMETER_LABELS.hundred_days, key: 'hundred_days', width: 15 },
-    { header: PARAMETER_LABELS.aptitude, key: 'aptitude', width: 15 },
-    { header: PARAMETER_LABELS.certificate, key: 'certificate', width: 17 },
-    { header: 'Total Marks (250)', key: 'total_marks', width: 18 },
-    { header: 'Readiness Level', key: 'level', width: 22 }
+    { header: 'Department', key: 'department', width: 16 },
+    { header: 'Semester', key: 'semester', width: 12 },
+    { header: PARAMETER_LABELS.coding_problems, key: 'coding_problems', width: 22 },
+    { header: PARAMETER_LABELS.cp_rating, key: 'cp_rating', width: 18 },
+    { header: PARAMETER_LABELS.opensource, key: 'opensource', width: 18 },
+    { header: PARAMETER_LABELS.competition, key: 'competition', width: 18 },
+    { header: PARAMETER_LABELS.internship, key: 'internship', width: 18 },
+    { header: PARAMETER_LABELS.project, key: 'project', width: 18 },
+    { header: PARAMETER_LABELS.language, key: 'language', width: 16 },
+    { header: PARAMETER_LABELS.gate, key: 'gate', width: 16 },
+    { header: PARAMETER_LABELS.monthly_coding, key: 'monthly_coding', width: 22 },
+    { header: PARAMETER_LABELS.hundred_days, key: 'hundred_days', width: 18 },
+    { header: PARAMETER_LABELS.aptitude, key: 'aptitude', width: 16 },
+    { header: PARAMETER_LABELS.certificate, key: 'certificate', width: 18 },
+    { header: 'Total Marks (250)', key: 'total_marks', width: 20 },
+    { header: 'Readiness Level', key: 'level', width: 24 }
   ];
 
   // Style Header Row (Row 1)
   const headerRow = worksheet.getRow(1);
-  headerRow.height = 30;
+  headerRow.height = 32;
   headerRow.eachCell((cell) => {
     cell.fill = {
       type: 'pattern',
@@ -216,7 +216,7 @@ async function generateScoresWorkbook({ semester, department, search }) {
       fgColor: { argb: 'FF1E1B4B' } // Deep Navy / Indigo
     };
     cell.font = {
-      name: 'Calibri',
+      name: 'Segoe UI',
       size: 11,
       bold: true,
       color: { argb: 'FFFFFFFF' } // White Text
@@ -224,7 +224,7 @@ async function generateScoresWorkbook({ semester, department, search }) {
     cell.alignment = {
       vertical: 'middle',
       horizontal: 'center',
-      wrapText: true
+      wrapText: false
     };
     cell.border = {
       top: { style: 'thin', color: { argb: 'FF334155' } },
