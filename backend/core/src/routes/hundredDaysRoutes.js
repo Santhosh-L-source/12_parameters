@@ -421,12 +421,14 @@ router.post(
       }
 
       const { student_id, training_program, selection_year } = req.body;
+      const cleanId = String(student_id).trim();
       const marks = PROGRAM_MARKS[training_program] || 0;
+      const mentorId = req.user.id_number || req.user.roll_number || 'MENTOR';
 
-      // Upsert into hundred_days_evidence
+      // 1. Upsert into hundred_days_evidence
       const existing = await sequelize.query(
-        `SELECT id FROM hundred_days_evidence WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(:student_id))`,
-        { replacements: { student_id }, type: sequelize.QueryTypes.SELECT }
+        `SELECT id FROM hundred_days_evidence WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(:cleanId))`,
+        { replacements: { cleanId }, type: sequelize.QueryTypes.SELECT }
       );
 
       if (existing.length > 0) {
@@ -444,7 +446,7 @@ router.post(
               id: existing[0].id,
               training_program,
               selection_year: selection_year || new Date().getFullYear(),
-              mentorId: req.user.id_number || req.user.roll_number
+              mentorId
             },
             type: sequelize.QueryTypes.UPDATE
           }
@@ -453,30 +455,62 @@ router.post(
         await sequelize.query(
           `INSERT INTO hundred_days_evidence
            (student_id, training_program, selection_year, status, mentor_id, verified_at, verification_source, submitted_at)
-           VALUES (:student_id, :training_program, :selection_year, 'VERIFIED', :mentorId, NOW(), 'MENTOR_MANUAL', NOW())`,
+           VALUES (:cleanId, :training_program, :selection_year, 'VERIFIED', :mentorId, NOW(), 'MENTOR_MANUAL', NOW())
+           ON CONFLICT (student_id) DO UPDATE
+           SET training_program = EXCLUDED.training_program,
+               status = 'VERIFIED',
+               mentor_id = EXCLUDED.mentor_id,
+               verified_at = NOW(),
+               verification_source = 'MENTOR_MANUAL'`,
           {
             replacements: {
-              student_id,
+              cleanId,
               training_program,
               selection_year: selection_year || new Date().getFullYear(),
-              mentorId: req.user.id_number || req.user.roll_number
+              mentorId
             },
             type: sequelize.QueryTypes.INSERT
           }
         );
       }
 
-      // Update scores table
-      await sequelize.query(
-        `DELETE FROM scores WHERE LOWER(TRIM(register_number)) = LOWER(TRIM(:student_id)) AND parameter = 'hundred_days'`,
-        { replacements: { student_id }, type: sequelize.QueryTypes.DELETE }
+      // 2. Update/upsert master scores record
+      const existingScore = await sequelize.query(
+        `SELECT id FROM scores WHERE LOWER(TRIM(register_number)) = LOWER(TRIM(:cleanId))`,
+        { replacements: { cleanId }, type: sequelize.QueryTypes.SELECT }
       );
 
-      if (marks > 0) {
+      if (existingScore.length > 0) {
         await sequelize.query(
-          `INSERT INTO scores (register_number, academic_year, parameter, marks, semester, provisional, rule_version, calculated_at)
-           VALUES (:student_id, 2026, 'hundred_days', :marks, 1, false, 'Mentor Assessment', NOW())`,
-          { replacements: { student_id, marks }, type: sequelize.QueryTypes.INSERT }
+          `UPDATE scores
+           SET hundred_days_score = :marks,
+               total_score = COALESCE(language_score, 0) + COALESCE(gate_score, 0) + 
+                             COALESCE(competition_score, 0) + COALESCE(internship_score, 0) + 
+                             COALESCE(certificate_score, 0) + COALESCE(aptitude_score, 0) + 
+                             COALESCE(coding_score, 0) + COALESCE(cp_score, 0) + 
+                             COALESCE(oss_score, 0) + COALESCE(month_score, 0) + 
+                             COALESCE(proj_score, 0) + :marks,
+               calculated_at = NOW(),
+               updated_at = NOW()
+           WHERE LOWER(TRIM(register_number)) = LOWER(TRIM(:cleanId))`,
+          { replacements: { cleanId, marks }, type: sequelize.QueryTypes.UPDATE }
+        );
+      } else {
+        await sequelize.query(
+          `INSERT INTO scores 
+           (register_number, academic_year, hundred_days_score, total_score, calculated_at, created_at, updated_at)
+           VALUES (:cleanId, 2026, :marks, :marks, NOW(), NOW(), NOW())
+           ON CONFLICT (register_number, academic_year) DO UPDATE
+           SET hundred_days_score = EXCLUDED.hundred_days_score,
+               total_score = COALESCE(scores.language_score, 0) + COALESCE(scores.gate_score, 0) + 
+                             COALESCE(scores.competition_score, 0) + COALESCE(scores.internship_score, 0) + 
+                             COALESCE(scores.certificate_score, 0) + COALESCE(scores.aptitude_score, 0) + 
+                             COALESCE(scores.coding_score, 0) + COALESCE(scores.cp_score, 0) + 
+                             COALESCE(scores.oss_score, 0) + COALESCE(scores.month_score, 0) + 
+                             COALESCE(scores.proj_score, 0) + EXCLUDED.hundred_days_score,
+               calculated_at = NOW(),
+               updated_at = NOW()`,
+          { replacements: { cleanId, marks }, type: sequelize.QueryTypes.INSERT }
         );
       }
 
@@ -527,8 +561,18 @@ router.get('/cohort', authenticate, async (req, res, next) => {
         p.mentor_year,
         e.id as evidence_id,
         COALESCE(e.training_program, 'NOT_SELECTED') as training_program,
-        COALESCE(s.marks, 0) as marks,
-        COALESCE(e.status, CASE WHEN s.marks > 0 THEN 'VERIFIED' ELSE 'NOT_SUBMITTED' END) as status,
+        COALESCE(
+          s.hundred_days_score,
+          s.marks,
+          CASE 
+            WHEN e.training_program = 'HOPE_ELITE' THEN 15
+            WHEN e.training_program = 'HOPE_NON_ELITE' THEN 10
+            WHEN e.training_program = 'PEP' THEN 5
+            ELSE 0 
+          END,
+          0
+        ) as marks,
+        COALESCE(e.status, CASE WHEN COALESCE(s.hundred_days_score, s.marks, 0) > 0 THEN 'VERIFIED' ELSE 'NOT_SUBMITTED' END) as status,
         e.verified_at,
         e.submitted_at
       FROM profiles p
@@ -536,8 +580,8 @@ router.get('/cohort', authenticate, async (req, res, next) => {
         ON LOWER(TRIM(e.student_id)) = LOWER(TRIM(p.id_number)) 
         OR (p.register_number IS NOT NULL AND LOWER(TRIM(e.student_id)) = LOWER(TRIM(p.register_number)))
       LEFT JOIN scores s 
-        ON (LOWER(TRIM(s.register_number)) = LOWER(TRIM(p.id_number)) OR LOWER(TRIM(s.register_number)) = LOWER(TRIM(p.register_number)))
-        AND s.parameter = 'hundred_days'
+        ON LOWER(TRIM(s.register_number)) = LOWER(TRIM(p.id_number)) 
+        OR (p.register_number IS NOT NULL AND LOWER(TRIM(s.register_number)) = LOWER(TRIM(p.register_number)))
       WHERE p.role = 'student'
     `;
 
@@ -600,6 +644,7 @@ router.post('/batch-evaluate', authenticate, async (req, res, next) => {
         await sequelize.query(
           `UPDATE hundred_days_evidence
            SET training_program = :training_program,
+               selection_year = 2026,
                status = 'VERIFIED',
                mentor_id = :mentorId,
                verified_at = NOW(),
@@ -617,8 +662,14 @@ router.post('/batch-evaluate', authenticate, async (req, res, next) => {
       } else {
         await sequelize.query(
           `INSERT INTO hundred_days_evidence
-           (student_id, training_program, status, mentor_id, verified_at, verification_source, submitted_at)
-           VALUES (:cleanId, :training_program, 'VERIFIED', :mentorId, NOW(), 'MENTOR_MANUAL', NOW())`,
+           (student_id, training_program, selection_year, status, mentor_id, verified_at, verification_source, submitted_at)
+           VALUES (:cleanId, :training_program, 2026, 'VERIFIED', :mentorId, NOW(), 'MENTOR_MANUAL', NOW())
+           ON CONFLICT (student_id) DO UPDATE
+           SET training_program = EXCLUDED.training_program,
+               status = 'VERIFIED',
+               mentor_id = EXCLUDED.mentor_id,
+               verified_at = NOW(),
+               verification_source = 'MENTOR_MANUAL'`,
           {
             replacements: {
               cleanId,
@@ -630,16 +681,42 @@ router.post('/batch-evaluate', authenticate, async (req, res, next) => {
         );
       }
 
-      // 2. Scores table update
-      await sequelize.query(
-        `DELETE FROM scores WHERE LOWER(TRIM(register_number)) = LOWER(:cleanId) AND parameter = 'hundred_days'`,
-        { replacements: { cleanId }, type: sequelize.QueryTypes.DELETE }
+      // 2. Scores master row update or insert
+      const existingScore = await sequelize.query(
+        `SELECT id FROM scores WHERE LOWER(TRIM(register_number)) = LOWER(:cleanId)`,
+        { replacements: { cleanId }, type: sequelize.QueryTypes.SELECT }
       );
 
-      if (marks > 0) {
+      if (existingScore.length > 0) {
         await sequelize.query(
-          `INSERT INTO scores (register_number, academic_year, parameter, marks, semester, provisional, rule_version, calculated_at)
-           VALUES (:cleanId, 2026, 'hundred_days', :marks, 1, false, 'Mentor Assessment', NOW())`,
+          `UPDATE scores
+           SET hundred_days_score = :marks,
+               total_score = COALESCE(language_score, 0) + COALESCE(gate_score, 0) + 
+                             COALESCE(competition_score, 0) + COALESCE(internship_score, 0) + 
+                             COALESCE(certificate_score, 0) + COALESCE(aptitude_score, 0) + 
+                             COALESCE(coding_score, 0) + COALESCE(cp_score, 0) + 
+                             COALESCE(oss_score, 0) + COALESCE(month_score, 0) + 
+                             COALESCE(proj_score, 0) + :marks,
+               calculated_at = NOW(),
+               updated_at = NOW()
+           WHERE LOWER(TRIM(register_number)) = LOWER(:cleanId)`,
+          { replacements: { cleanId, marks }, type: sequelize.QueryTypes.UPDATE }
+        );
+      } else {
+        await sequelize.query(
+          `INSERT INTO scores 
+           (register_number, academic_year, hundred_days_score, total_score, calculated_at, created_at, updated_at)
+           VALUES (:cleanId, 2026, :marks, :marks, NOW(), NOW(), NOW())
+           ON CONFLICT (register_number, academic_year) DO UPDATE
+           SET hundred_days_score = EXCLUDED.hundred_days_score,
+               total_score = COALESCE(scores.language_score, 0) + COALESCE(scores.gate_score, 0) + 
+                             COALESCE(scores.competition_score, 0) + COALESCE(scores.internship_score, 0) + 
+                             COALESCE(scores.certificate_score, 0) + COALESCE(scores.aptitude_score, 0) + 
+                             COALESCE(scores.coding_score, 0) + COALESCE(scores.cp_score, 0) + 
+                             COALESCE(scores.oss_score, 0) + COALESCE(scores.month_score, 0) + 
+                             COALESCE(scores.proj_score, 0) + EXCLUDED.hundred_days_score,
+               calculated_at = NOW(),
+               updated_at = NOW()`,
           { replacements: { cleanId, marks }, type: sequelize.QueryTypes.INSERT }
         );
       }
