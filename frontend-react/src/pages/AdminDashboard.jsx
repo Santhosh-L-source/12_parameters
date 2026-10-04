@@ -40,7 +40,7 @@ const AdminDashboard = () => {
 
   // Export Scores State
   const [showExportModal, setShowExportModal] = useState(false);
-  const [exportSemester, setExportSemester] = useState('ALL');
+  const [exportSemester, setExportSemester] = useState('5');
   const [exportDept, setExportDept] = useState('ALL');
   const [exportLoading, setExportLoading] = useState(false);
   const [exportEmail, setExportEmail] = useState('');
@@ -963,7 +963,7 @@ const AdminDashboard = () => {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#475569', marginBottom: '0.4rem' }}>
-                      Semester Filter
+                      Select Semester
                     </label>
                     <select
                       className="filter-select"
@@ -971,11 +971,14 @@ const AdminDashboard = () => {
                       value={exportSemester}
                       onChange={(e) => setExportSemester(e.target.value)}
                     >
-                      <option value="ALL">All Semesters (All Batches)</option>
-                      <option value="3">Semester 3 (2nd Year / 2029 Batch)</option>
+                      <option value="1">Semester 1 (1st Year)</option>
+                      <option value="2">Semester 2 (1st Year)</option>
+                      <option value="3">Semester 3 (2nd Year)</option>
                       <option value="4">Semester 4 (2nd Year)</option>
-                      <option value="5">Semester 5 (3rd Year / 2028 Batch)</option>
+                      <option value="5">Semester 5 (3rd Year)</option>
                       <option value="6">Semester 6 (3rd Year)</option>
+                      <option value="7">Semester 7 (4th Year)</option>
+                      <option value="8">Semester 8 (4th Year)</option>
                     </select>
                   </div>
                   <div>
