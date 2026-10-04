@@ -300,6 +300,33 @@ export const adminAPI = {
     }).then(res => res.json());
   },
   getImportJobStatus: (jobId) => apiRequest(`/api/admin/import-jobs/${jobId}`),
+  exportScores: async (params = {}) => {
+    const token = getAuthToken();
+    const query = new URLSearchParams(params).toString();
+    const response = await fetch(`${API_BASE_URL}/api/admin/export/scores${query ? `?${query}` : ''}`, {
+      headers: {
+        ...(token && { 'Authorization': `Bearer ${token}` }),
+      }
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ error: 'Export failed' }));
+      throw new Error(err.error || 'Failed to download Excel file');
+    }
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Student_Scores_${params.semester ? `Semester_${params.semester}` : 'All_Students'}_${new Date().toISOString().split('T')[0]}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    return true;
+  },
+  emailScoresExport: (data) => apiRequest('/api/admin/export/scores/email', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
 };
 
 export default apiRequest;

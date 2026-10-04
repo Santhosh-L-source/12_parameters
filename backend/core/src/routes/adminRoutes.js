@@ -976,6 +976,67 @@ router.post('/auto-assign-departments', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/admin/export/scores
+ * Export all students' 12-parameter pivoted scores as formatted Excel (.xlsx)
+ * Query params: format=xlsx, semester=3|5|all, department=CSE|..., search=...
+ */
+router.get('/export/scores', async (req, res) => {
+  try {
+    const { semester, department, search } = req.query;
+    const { generateScoresWorkbook } = require('../services/scoreExportService');
+
+    const { workbook, totalRows } = await generateScoresWorkbook({
+      semester: semester && semester !== 'all' ? semester : null,
+      department: department && department !== 'ALL' ? department : null,
+      search: search || null
+    });
+
+    const semLabel = semester && semester !== 'all' ? `Semester_${semester}` : 'All_Semesters';
+    const filename = `Student_Scores_${semLabel}_${new Date().toISOString().split('T')[0]}.xlsx`;
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    console.error('[ADMIN EXPORT SCORES] Error:', error.message);
+    res.status(500).json({ success: false, error: 'Failed to generate scores Excel file: ' + error.message });
+  }
+});
+
+/**
+ * POST /api/admin/export/scores/email
+ * Email the generated 12-parameter scores Excel report as an attachment
+ * Body: { email: 'coordinator@example.com', semester: 3 }
+ */
+router.post('/export/scores/email', async (req, res) => {
+  try {
+    const { email, semester, department } = req.body;
+    if (!email || !email.includes('@')) {
+      return res.status(400).json({ success: false, error: 'A valid recipient email address is required' });
+    }
+
+    const { emailScoresExport } = require('../services/scoreExportService');
+    const result = await emailScoresExport({
+      recipientEmail: email.trim(),
+      semester: semester && semester !== 'all' ? semester : null,
+      department: department && department !== 'ALL' ? department : null
+    });
+
+    res.json({
+      success: true,
+      message: `Scores Excel file successfully sent to ${email}`,
+      details: result
+    });
+  } catch (error) {
+    console.error('[ADMIN EMAIL SCORES] Error:', error.message);
+    res.status(500).json({ success: false, error: 'Failed to email scores export: ' + error.message });
+  }
+});
+
 module.exports = router;
+
 
 

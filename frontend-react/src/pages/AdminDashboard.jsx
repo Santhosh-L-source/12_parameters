@@ -38,6 +38,59 @@ const AdminDashboard = () => {
   const [uploadLoading, setUploadLoading] = useState(false);
   const [importJob, setImportJob] = useState(null);
 
+  // Export Scores State
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportSemester, setExportSemester] = useState('ALL');
+  const [exportDept, setExportDept] = useState('ALL');
+  const [exportLoading, setExportLoading] = useState(false);
+  const [exportEmail, setExportEmail] = useState('');
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [exportAlert, setExportAlert] = useState(null);
+
+  const handleDownloadExcel = async () => {
+    try {
+      setExportLoading(true);
+      setExportAlert(null);
+      const params = {};
+      if (exportSemester !== 'ALL') params.semester = exportSemester;
+      if (exportDept !== 'ALL') params.department = exportDept;
+      await adminAPI.exportScores(params);
+      setExportAlert({ type: 'success', message: 'Excel workbook (.xlsx) downloaded successfully!' });
+    } catch (err) {
+      console.error('Export download error:', err);
+      setExportAlert({ type: 'error', message: err.message || 'Failed to download Excel file.' });
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
+  const handleEmailExcel = async (e) => {
+    e.preventDefault();
+    if (!exportEmail || !exportEmail.includes('@')) {
+      setExportAlert({ type: 'error', message: 'Please enter a valid recipient email address.' });
+      return;
+    }
+    try {
+      setEmailLoading(true);
+      setExportAlert(null);
+      const payload = { email: exportEmail };
+      if (exportSemester !== 'ALL') payload.semester = exportSemester;
+      if (exportDept !== 'ALL') payload.department = exportDept;
+      const res = await adminAPI.emailScoresExport(payload);
+      if (res.success) {
+        setExportAlert({ type: 'success', message: res.message || `Export emailed successfully to ${exportEmail}!` });
+        setExportEmail('');
+      } else {
+        setExportAlert({ type: 'error', message: res.error || 'Failed to email export report.' });
+      }
+    } catch (err) {
+      console.error('Email export error:', err);
+      setExportAlert({ type: 'error', message: err.message || 'Failed to send email.' });
+    } finally {
+      setEmailLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadAllMentors();
   }, []);
@@ -303,6 +356,16 @@ const AdminDashboard = () => {
           <div>
             <h1>⚙️ Admin Control & Academic Center</h1>
             <p>Supervise student readiness scores (250 marks), mentor allocations, and cohort matrices partitioned by academic year</p>
+          </div>
+          <div className="admin-header-actions">
+            <button 
+              className="primary-btn"
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'linear-gradient(135deg, #059669 0%, #047857 100%)', boxShadow: '0 4px 12px rgba(5, 150, 105, 0.3)' }}
+              onClick={() => { setShowExportModal(true); setExportAlert(null); }}
+            >
+              <span>📊</span>
+              <span>Export Scores (.xlsx)</span>
+            </button>
           </div>
         </div>
 
@@ -861,6 +924,147 @@ const AdminDashboard = () => {
               <div className="modal-footer">
                 <button className="primary-btn" onClick={() => setSelectedStudentForModal(null)}>
                   Close Scorecard
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ============================================================ */}
+        {/* MODAL: EXPORT SCORES AS EXCEL (.XLSX) / EMAIL                */}
+        {/* ============================================================ */}
+        {showExportModal && (
+          <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setShowExportModal(false); }}>
+            <div className="modal-content" style={{ maxWidth: '580px' }}>
+              <div className="modal-header">
+                <div>
+                  <h2>📊 Export Student Readiness Scores</h2>
+                  <p>Generate a 12-parameter pivoted Excel spreadsheet (.xlsx) formatted with frozen headers and score tiers</p>
+                </div>
+                <button className="close-btn" onClick={() => setShowExportModal(false)}>✕</button>
+              </div>
+
+              <div className="modal-body" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                {exportAlert && (
+                  <div style={{
+                    padding: '0.85rem 1rem',
+                    borderRadius: '8px',
+                    fontSize: '0.9rem',
+                    fontWeight: 500,
+                    backgroundColor: exportAlert.type === 'success' ? '#ecfdf5' : '#fef2f2',
+                    color: exportAlert.type === 'success' ? '#065f46' : '#991b1b',
+                    border: `1px solid ${exportAlert.type === 'success' ? '#a7f3d0' : '#fecaca'}`
+                  }}>
+                    {exportAlert.type === 'success' ? '✅ ' : '❌ '}{exportAlert.message}
+                  </div>
+                )}
+
+                {/* Filters */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#475569', marginBottom: '0.4rem' }}>
+                      Semester Filter
+                    </label>
+                    <select
+                      className="filter-select"
+                      style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid #cbd5e1' }}
+                      value={exportSemester}
+                      onChange={(e) => setExportSemester(e.target.value)}
+                    >
+                      <option value="ALL">All Semesters (All Batches)</option>
+                      <option value="3">Semester 3 (2nd Year / 2029 Batch)</option>
+                      <option value="4">Semester 4 (2nd Year)</option>
+                      <option value="5">Semester 5 (3rd Year / 2028 Batch)</option>
+                      <option value="6">Semester 6 (3rd Year)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#475569', marginBottom: '0.4rem' }}>
+                      Department Filter
+                    </label>
+                    <select
+                      className="filter-select"
+                      style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid #cbd5e1' }}
+                      value={exportDept}
+                      onChange={(e) => setExportDept(e.target.value)}
+                    >
+                      <option value="ALL">All Departments</option>
+                      <option value="CSE">CSE</option>
+                      <option value="AIDS">AIDS</option>
+                      <option value="AIML">AIML</option>
+                      <option value="IT">IT</option>
+                      <option value="CSBS">CSBS</option>
+                      <option value="ECE">ECE</option>
+                      <option value="EEE">EEE</option>
+                      <option value="MECH">MECH</option>
+                      <option value="CIVIL">CIVIL</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Specification Box */}
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1rem', fontSize: '0.85rem', color: '#475569' }}>
+                  <div style={{ fontWeight: 600, color: '#1e293b', marginBottom: '0.35rem' }}>📄 Excel Workbook Details:</div>
+                  <ul style={{ margin: 0, paddingLeft: '1.25rem', lineHeight: '1.5' }}>
+                    <li><strong>18 Columns:</strong> Roll Number, Name, Department, Semester, 12 Parameter Scores, Total Marks (250), Readiness Level</li>
+                    <li><strong>Formatting:</strong> Frozen bold header row, auto-fitted column widths, score tier color tags</li>
+                    <li><strong>Engine:</strong> Real Excel workbook generation (<code>exceljs</code>)</li>
+                  </ul>
+                </div>
+
+                {/* Action 1: Direct Download */}
+                <div>
+                  <button
+                    className="primary-btn"
+                    style={{ width: '100%', padding: '0.8rem', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', background: '#2563eb' }}
+                    onClick={handleDownloadExcel}
+                    disabled={exportLoading}
+                  >
+                    {exportLoading ? (
+                      <>
+                        <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                        Generating & Downloading .xlsx...
+                      </>
+                    ) : (
+                      <>
+                        <span>⬇️</span>
+                        <span>Download Scores Spreadsheet (.xlsx)</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Divider */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#94a3b8', fontSize: '0.8rem' }}>
+                  <div style={{ flex: 1, height: '1px', background: '#e2e8f0' }} />
+                  <span>OR EMAIL REPORT DIRECTLY</span>
+                  <div style={{ flex: 1, height: '1px', background: '#e2e8f0' }} />
+                </div>
+
+                {/* Action 2: Email Attachment */}
+                <form onSubmit={handleEmailExcel} style={{ display: 'flex', gap: '0.5rem' }}>
+                  <input
+                    type="email"
+                    placeholder="recipient@college.edu / team lead email"
+                    value={exportEmail}
+                    onChange={(e) => setExportEmail(e.target.value)}
+                    style={{ flex: 1, padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }}
+                    required
+                  />
+                  <button
+                    type="submit"
+                    className="secondary-btn"
+                    style={{ padding: '0.65rem 1.25rem', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
+                    disabled={emailLoading}
+                  >
+                    {emailLoading ? 'Sending...' : '✉️ Send Email'}
+                  </button>
+                </form>
+              </div>
+
+              <div className="modal-footer" style={{ borderTop: '1px solid #e2e8f0', padding: '1rem 1.5rem', display: 'flex', justifyContent: 'flex-end' }}>
+                <button className="secondary-btn" onClick={() => setShowExportModal(false)}>
+                  Close
                 </button>
               </div>
             </div>
