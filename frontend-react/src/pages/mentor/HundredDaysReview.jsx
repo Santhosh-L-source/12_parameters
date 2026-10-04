@@ -473,7 +473,7 @@ const HundredDaysReview = () => {
                             />
                           </td>
                           <td style={{ fontWeight: 700, color: '#1e293b' }}>
-                            {st.id_number}
+                            {(st.id_number && !/^\d{1,4}$/.test(String(st.id_number).trim())) ? st.id_number : (st.register_number || st.id_number || '—')}
                           </td>
                           <td style={{ color: '#64748b', fontSize: '0.85rem' }}>
                             {st.register_number || '—'}

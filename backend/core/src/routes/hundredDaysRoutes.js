@@ -511,7 +511,15 @@ router.get('/cohort', authenticate, async (req, res, next) => {
 
     let cohortQuery = `
       SELECT 
-        p.id_number,
+        COALESCE(
+          CASE 
+            WHEN p.id_number IS NOT NULL AND TRIM(p.id_number) != '' AND NOT (p.id_number ~ '^[0-9]{1,4}$') 
+            THEN p.id_number 
+            ELSE p.register_number 
+          END, 
+          p.register_number,
+          p.id_number
+        ) as id_number,
         p.register_number,
         p.name,
         p.department,
