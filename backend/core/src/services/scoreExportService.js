@@ -169,6 +169,7 @@ async function getPivotedScoresData({ semester, department, search }) {
       college: student.college || "St. Joseph's Group of Institutions",
       department: student.department || 'General',
       roll_number: roll,
+      register_number: reg || student.id_number || '',
       name: student.name || 'Unknown',
       semester: studentSem,
       coding_problems: studentScores.get('coding_problems') || 0,
@@ -236,11 +237,12 @@ async function generateScoresWorkbook({ semester, department, search }) {
     views: [{ state: 'frozen', xSplit: 0, ySplit: 1 }] // Frozen top header row
   });
 
-  // Define Columns with College and Department leading
+  // Define Columns with College, Department, Roll No, Register No, and Name
   worksheet.columns = [
     { header: 'College', key: 'college', width: 34 },
     { header: 'Department', key: 'department', width: 16 },
     { header: 'Roll Number', key: 'roll_number', width: 16 },
+    { header: 'Register Number', key: 'register_number', width: 18 },
     { header: 'Student Name', key: 'name', width: 28 },
     { header: 'Semester', key: 'semester', width: 12 },
     { header: PARAMETER_LABELS.coding_problems, key: 'coding_problems', width: 22 },
@@ -306,10 +308,10 @@ async function generateScoresWorkbook({ semester, department, search }) {
       };
 
       // Alignment rules:
-      // 1: College (left), 2: Department (left/center), 3: Roll (center), 4: Name (left), 5: Semester (center), 6-19: Scores & Level
-      if (colNumber === 1 || colNumber === 4) {
+      // 1: College (left), 2: Department (center), 3: Roll (center), 4: Register (center), 5: Name (left), 6: Semester (center), 7-20: Scores & Level
+      if (colNumber === 1 || colNumber === 5) {
         cell.alignment = { vertical: 'middle', horizontal: 'left' };
-      } else if (colNumber === 2 || colNumber === 3 || colNumber === 5) {
+      } else if (colNumber === 2 || colNumber === 3 || colNumber === 4 || colNumber === 6) {
         cell.alignment = { vertical: 'middle', horizontal: 'center' };
       } else {
         cell.alignment = { vertical: 'middle', horizontal: 'center' };
@@ -322,9 +324,9 @@ async function generateScoresWorkbook({ semester, department, search }) {
         fgColor: { argb: baseRowColor }
       };
 
-      // Conditional formatting for Total Marks (Col 18) & Level (Col 19)
+      // Conditional formatting for Total Marks (Col 19) & Level (Col 20)
       const totalScore = student.total_marks;
-      if (colNumber === 18) {
+      if (colNumber === 19) {
         cell.font = { name: 'Calibri', size: 11, bold: true };
         if (totalScore >= 200) {
           cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEDE9FE' } }; // Light Purple (Elite)
@@ -344,7 +346,7 @@ async function generateScoresWorkbook({ semester, department, search }) {
         }
       }
 
-      if (colNumber === 19) {
+      if (colNumber === 20) {
         cell.font = { name: 'Calibri', size: 10.5, bold: true };
         if (totalScore >= 200) cell.font.color = { argb: 'FF5B21B6' };
         else if (totalScore >= 160) cell.font.color = { argb: 'FF0369A1' };
