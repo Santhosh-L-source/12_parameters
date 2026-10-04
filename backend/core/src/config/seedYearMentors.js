@@ -92,7 +92,7 @@ async function seedYearMentors() {
         UPDATE profiles
         SET assigned_mentor_id = :mentorId
         WHERE role = 'student'
-          AND (LOWER(TRIM(id_number)) LIKE '25%' OR register_number LIKE '312325%' OR id_number LIKE '312325%')
+          AND (LOWER(TRIM(id_number)) LIKE '25%' OR register_number LIKE '312325%' OR register_number LIKE '312425%' OR id_number LIKE '312325%' OR id_number LIKE '312425%')
           AND NOT (LOWER(TRIM(id_number)) LIKE '24%' OR register_number LIKE '312324%')
           AND ${deptFilter};
       `, {
@@ -106,7 +106,7 @@ async function seedYearMentors() {
       SET assigned_mentor_id = 'MENTOR_3RD_CSE'
       WHERE role = 'student'
         AND (LOWER(TRIM(id_number)) LIKE '24%' OR register_number LIKE '312324%' OR id_number LIKE '312324%')
-        AND NOT (LOWER(TRIM(id_number)) LIKE '25%' OR register_number LIKE '312325%')
+        AND NOT (LOWER(TRIM(id_number)) LIKE '25%' OR register_number LIKE '312325%' OR register_number LIKE '312425%')
         AND (assigned_mentor_id IS NULL OR assigned_mentor_id = '' OR assigned_mentor_id LIKE '%2ND%');
     `);
 
@@ -115,7 +115,7 @@ async function seedYearMentors() {
       UPDATE profiles
       SET assigned_mentor_id = 'MENTOR_2ND_CSE'
       WHERE role = 'student'
-        AND (LOWER(TRIM(id_number)) LIKE '25%' OR register_number LIKE '312325%' OR id_number LIKE '312325%')
+        AND (LOWER(TRIM(id_number)) LIKE '25%' OR register_number LIKE '312325%' OR register_number LIKE '312425%' OR id_number LIKE '312325%' OR id_number LIKE '312425%')
         AND NOT (LOWER(TRIM(id_number)) LIKE '24%' OR register_number LIKE '312324%')
         AND (assigned_mentor_id IS NULL OR assigned_mentor_id = '' OR assigned_mentor_id LIKE '%3RD%');
     `);
