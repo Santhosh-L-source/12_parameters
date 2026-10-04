@@ -80,18 +80,7 @@ const Header = () => {
           </a>
         )}
 
-        {role === 'admin' && (
-          <a
-            href="#"
-            onClick={(e) => {
-              e.preventDefault();
-              navigateTo('/admin');
-            }}
-            className={`nav-link ${isAdminDash ? 'active' : ''}`}
-          >
-            ⚙️ Admin Control Center
-          </a>
-        )}
+
 
         {user && (
           <div className="user-badge-header">
