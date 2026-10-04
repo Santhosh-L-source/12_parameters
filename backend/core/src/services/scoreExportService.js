@@ -81,7 +81,7 @@ async function getPivotedScoresData({ semester, department, search }) {
     replacements.search = `%${search.toLowerCase()}%`;
   }
 
-  profileQuery += ` ORDER BY department, id_number`;
+  profileQuery += ` ORDER BY COALESCE(college, ''), department, id_number`;
 
   const students = await sequelize.query(profileQuery, {
     replacements,
@@ -135,9 +135,10 @@ async function getPivotedScoresData({ semester, department, search }) {
                           new Map();
 
     const row = {
+      college: student.college || "St. Joseph's Group of Institutions",
+      department: student.department || 'General',
       roll_number: roll,
       name: student.name || 'Unknown',
-      department: student.department || 'General',
       semester: studentSem,
       coding_problems: studentScores.get('coding_problems') || 0,
       cp_rating: studentScores.get('cp_rating') || 0,
@@ -184,11 +185,12 @@ async function generateScoresWorkbook({ semester, department, search }) {
     views: [{ state: 'frozen', xSplit: 0, ySplit: 1 }] // Frozen top header row
   });
 
-  // Define Columns
+  // Define Columns with College and Department leading
   worksheet.columns = [
+    { header: 'College', key: 'college', width: 34 },
+    { header: 'Department', key: 'department', width: 16 },
     { header: 'Roll Number', key: 'roll_number', width: 16 },
     { header: 'Student Name', key: 'name', width: 28 },
-    { header: 'Department', key: 'department', width: 16 },
     { header: 'Semester', key: 'semester', width: 12 },
     { header: PARAMETER_LABELS.coding_problems, key: 'coding_problems', width: 22 },
     { header: PARAMETER_LABELS.cp_rating, key: 'cp_rating', width: 18 },
@@ -252,11 +254,12 @@ async function generateScoresWorkbook({ semester, department, search }) {
         right: { style: 'thin', color: { argb: 'FFE2E8F0' } }
       };
 
-      // Alignment rules
+      // Alignment rules:
+      // 1: College (left), 2: Department (left/center), 3: Roll (center), 4: Name (left), 5: Semester (center), 6-19: Scores & Level
       if (colNumber === 1 || colNumber === 4) {
-        cell.alignment = { vertical: 'middle', horizontal: 'center' };
-      } else if (colNumber === 2 || colNumber === 3) {
         cell.alignment = { vertical: 'middle', horizontal: 'left' };
+      } else if (colNumber === 2 || colNumber === 3 || colNumber === 5) {
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
       } else {
         cell.alignment = { vertical: 'middle', horizontal: 'center' };
       }
@@ -268,9 +271,9 @@ async function generateScoresWorkbook({ semester, department, search }) {
         fgColor: { argb: baseRowColor }
       };
 
-      // Conditional formatting for Total Marks (Col 17) & Level (Col 18)
+      // Conditional formatting for Total Marks (Col 18) & Level (Col 19)
       const totalScore = student.total_marks;
-      if (colNumber === 17) {
+      if (colNumber === 18) {
         cell.font = { name: 'Calibri', size: 11, bold: true };
         if (totalScore >= 200) {
           cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEDE9FE' } }; // Light Purple (Elite)
@@ -290,7 +293,7 @@ async function generateScoresWorkbook({ semester, department, search }) {
         }
       }
 
-      if (colNumber === 18) {
+      if (colNumber === 19) {
         cell.font = { name: 'Calibri', size: 10.5, bold: true };
         if (totalScore >= 200) cell.font.color = { argb: 'FF5B21B6' };
         else if (totalScore >= 160) cell.font.color = { argb: 'FF0369A1' };
