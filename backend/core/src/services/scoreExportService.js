@@ -96,6 +96,7 @@ async function getPivotedScoresData({ semester, department, search }) {
       ELSE 1 
     END,
     department ASC, 
+    LOWER(TRIM(name)) ASC,
     id_number ASC`;
 
   const students = await sequelize.query(profileQuery, {
