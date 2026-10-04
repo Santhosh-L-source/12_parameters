@@ -45,6 +45,19 @@ function getReadinessLevel(totalScore) {
 }
 
 /**
+ * Extract clean sortable first name by stripping leading initials (e.g., 'S. P AZHAGI' -> 'azhagi', 'S.SENTAMILAN' -> 'sentamilan')
+ */
+function getSortableFirstName(fullName) {
+  if (!fullName) return '';
+  let clean = String(fullName).trim();
+  // Strip patterns like 'S. P. ', 'A.G.', 'T K ', 'S. ', 'B.SRIVATSAN', 'S.K SARAVANA'
+  clean = clean.replace(/^([A-Za-z][\.\s]\s*)+/i, '');
+  clean = clean.replace(/^([A-Za-z]\.)+/i, '');
+  clean = clean.replace(/^[\s\.\-]+/, '');
+  return clean.length > 0 ? clean.toLowerCase() : String(fullName).trim().toLowerCase();
+}
+
+/**
  * Approximate student semester based on roll number
  */
 function calculateSemesterFromRoll(rollNo) {
@@ -180,6 +193,26 @@ async function getPivotedScoresData({ semester, department, search }) {
 
     pivoted.push(row);
   }
+
+  // Sort: 1. College (St. Joseph's College of Engineering first, then St. Joseph's Institute of Technology)
+  //       2. Department (A-Z)
+  //       3. First Name (A-Z, stripping leading initials like 'S. P ' or 'S. ' so 'S. P AZHAGI' sorts under 'Azhagi')
+  //       4. Roll Number fallback
+  pivoted.sort((a, b) => {
+    const colA = a.college.includes('Technology') ? 2 : 1;
+    const colB = b.college.includes('Technology') ? 2 : 1;
+    if (colA !== colB) return colA - colB;
+
+    const deptComp = (a.department || '').localeCompare(b.department || '');
+    if (deptComp !== 0) return deptComp;
+
+    const nameA = getSortableFirstName(a.name);
+    const nameB = getSortableFirstName(b.name);
+    const nameComp = nameA.localeCompare(nameB);
+    if (nameComp !== 0) return nameComp;
+
+    return (a.roll_number || '').localeCompare(b.roll_number || '');
+  });
 
   return pivoted;
 }
