@@ -45,14 +45,16 @@ function getReadinessLevel(totalScore) {
 }
 
 /**
- * Extract clean sortable first name by stripping leading initials (e.g., 'S. P AZHAGI' -> 'azhagi', 'S.SENTAMILAN' -> 'sentamilan')
+ * Extract clean sortable first name by stripping leading initials (e.g., 'S.P. AZHAGI' -> 'azhagi', 'S.SENTAMILAN' -> 'sentamilan')
  */
 function getSortableFirstName(fullName) {
   if (!fullName) return '';
   let clean = String(fullName).trim();
-  // Strip patterns like 'S. P. ', 'A.G.', 'T K ', 'S. ', 'B.SRIVATSAN', 'S.K SARAVANA'
+  // Strip patterns like 'S. P. ', 'S.P. ', 'S.P.', 'A.G.', 'T K ', 'S. ', 'B.SRIVATSAN', 'S.K SARAVANA'
   clean = clean.replace(/^([A-Za-z][\.\s]\s*)+/i, '');
   clean = clean.replace(/^([A-Za-z]\.)+/i, '');
+  // Also handle 1-2 letter standalone initials without dots like 'SP AZHAGI', 'TK SIVA'
+  clean = clean.replace(/^[A-Za-z]{1,2}\s+(?=[A-Za-z]{3,})/i, '');
   clean = clean.replace(/^[\s\.\-]+/, '');
   return clean.length > 0 ? clean.toLowerCase() : String(fullName).trim().toLowerCase();
 }
