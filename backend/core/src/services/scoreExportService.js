@@ -65,7 +65,16 @@ function calculateSemesterFromRoll(rollNo) {
 async function getPivotedScoresData({ semester, department, search }) {
   // 1. Fetch student profiles
   let profileQuery = `
-    SELECT id_number, register_number, name, department, college, mentor_year
+    SELECT 
+      id_number, 
+      register_number, 
+      name, 
+      department, 
+      CASE 
+        WHEN UPPER(COALESCE(college, '')) LIKE '%TECH%' THEN 'St. Joseph''s Institute of Technology'
+        ELSE 'St. Joseph''s College of Engineering'
+      END AS college,
+      mentor_year
     FROM profiles
     WHERE role = 'student'
   `;
@@ -81,7 +90,13 @@ async function getPivotedScoresData({ semester, department, search }) {
     replacements.search = `%${search.toLowerCase()}%`;
   }
 
-  profileQuery += ` ORDER BY COALESCE(college, ''), department, id_number`;
+  profileQuery += ` ORDER BY 
+    CASE 
+      WHEN UPPER(COALESCE(college, '')) LIKE '%TECH%' THEN 2 
+      ELSE 1 
+    END,
+    department ASC, 
+    id_number ASC`;
 
   const students = await sequelize.query(profileQuery, {
     replacements,
