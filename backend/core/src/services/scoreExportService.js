@@ -382,11 +382,22 @@ async function emailScoresExport({ recipientEmail, semester, department }) {
   const semLabel = semester ? `Semester_${semester}` : 'All_Semesters';
   const fileName = `Student_Scores_${semLabel}_${new Date().toISOString().split('T')[0]}.xlsx`;
 
+  // Reload .env dynamically so newly added credentials take effect without restarting the server
+  try {
+    const dotenv = require('dotenv');
+    const path = require('path');
+    dotenv.config({ path: path.resolve(__dirname, '../../.env'), override: true });
+    dotenv.config({ path: path.resolve(process.cwd(), '.env'), override: true });
+    dotenv.config({ path: path.resolve(process.cwd(), 'backend/core/.env'), override: true });
+  } catch (e) {
+    // Ignore if dotenv reload fails
+  }
+
   const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER;
   const smtpPass = process.env.SMTP_PASS || process.env.EMAIL_PASSWORD;
 
   if (!smtpUser || !smtpPass) {
-    throw new Error('SMTP credentials are not configured in backend/core/.env. Please configure SMTP_USER and SMTP_PASS (or EMAIL_USER and EMAIL_PASSWORD) to send emails, or use the direct "Download Scores Spreadsheet (.xlsx)" button.');
+    throw new Error('SMTP credentials are not configured in backend/core/.env (or Vercel Environment Variables). Please configure SMTP_USER and SMTP_PASS (or EMAIL_USER and EMAIL_PASSWORD) to send emails, or use the direct "Download Scores Spreadsheet (.xlsx)" button.');
   }
 
   // Use configured SMTP transport
