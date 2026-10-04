@@ -474,8 +474,8 @@ router.post(
 
       if (marks > 0) {
         await sequelize.query(
-          `INSERT INTO scores (register_number, parameter, marks, semester, provisional, calculated_at)
-           VALUES (:student_id, 'hundred_days', :marks, 1, false, NOW())`,
+          `INSERT INTO scores (register_number, academic_year, parameter, marks, semester, provisional, rule_version, calculated_at)
+           VALUES (:student_id, 2026, 'hundred_days', :marks, 1, false, 'Mentor Assessment', NOW())`,
           { replacements: { student_id, marks }, type: sequelize.QueryTypes.INSERT }
         );
       }
@@ -492,5 +492,162 @@ router.post(
     }
   }
 );
+
+/**
+ * GET /api/hundred-days/cohort
+ * Returns all mentees assigned to the logged-in mentor with their current 100 Days Training marks and tier
+ */
+router.get('/cohort', authenticate, async (req, res, next) => {
+  try {
+    if (req.user.role !== 'mentor' && req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only mentors and administrators can access cohort grading'
+      });
+    }
+
+    const mentorId = req.user.id_number || req.user.roll_number;
+    const mentorDept = req.user.department;
+
+    let cohortQuery = `
+      SELECT 
+        p.id_number,
+        p.register_number,
+        p.name,
+        p.department,
+        p.college,
+        p.mentor_year,
+        e.id as evidence_id,
+        COALESCE(e.training_program, 'NOT_SELECTED') as training_program,
+        COALESCE(s.marks, 0) as marks,
+        COALESCE(e.status, CASE WHEN s.marks > 0 THEN 'VERIFIED' ELSE 'NOT_SUBMITTED' END) as status,
+        e.verified_at,
+        e.submitted_at
+      FROM profiles p
+      LEFT JOIN hundred_days_evidence e 
+        ON LOWER(TRIM(e.student_id)) = LOWER(TRIM(p.id_number)) 
+        OR (p.register_number IS NOT NULL AND LOWER(TRIM(e.student_id)) = LOWER(TRIM(p.register_number)))
+      LEFT JOIN scores s 
+        ON (LOWER(TRIM(s.register_number)) = LOWER(TRIM(p.id_number)) OR LOWER(TRIM(s.register_number)) = LOWER(TRIM(p.register_number)))
+        AND s.parameter = 'hundred_days'
+      WHERE p.role = 'student'
+    `;
+
+    const replacements = { mentorId, mentorDept };
+    if (req.user.role === 'mentor') {
+      cohortQuery += ` AND (p.assigned_mentor_id = :mentorId OR (p.assigned_mentor_id IS NULL AND p.department = :mentorDept))`;
+    }
+
+    cohortQuery += ` ORDER BY p.department, p.id_number`;
+
+    const students = await sequelize.query(cohortQuery, {
+      replacements,
+      type: sequelize.QueryTypes.SELECT
+    });
+
+    res.json({
+      success: true,
+      students: students || []
+    });
+  } catch (err) {
+    console.error('[HUNDRED_DAYS] Cohort fetch error:', err.message);
+    next(err);
+  }
+});
+
+/**
+ * POST /api/hundred-days/batch-evaluate
+ * Bulk evaluate 100 Days Training for multiple students
+ */
+router.post('/batch-evaluate', authenticate, async (req, res, next) => {
+  try {
+    if (req.user.role !== 'mentor' && req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only mentors and administrators can evaluate 100 Days Training marks'
+      });
+    }
+
+    const { student_ids, training_program } = req.body;
+    if (!Array.isArray(student_ids) || student_ids.length === 0) {
+      return res.status(400).json({ success: false, message: 'student_ids array is required' });
+    }
+    if (!TRAINING_PROGRAMS.includes(training_program)) {
+      return res.status(400).json({ success: false, message: `training_program must be one of: ${TRAINING_PROGRAMS.join(', ')}` });
+    }
+
+    const marks = PROGRAM_MARKS[training_program] || 0;
+    const mentorId = req.user.id_number || req.user.roll_number || 'MENTOR';
+
+    for (const sId of student_ids) {
+      const cleanId = String(sId).trim();
+      
+      // 1. Evidence upsert
+      const existing = await sequelize.query(
+        `SELECT id FROM hundred_days_evidence WHERE LOWER(TRIM(student_id)) = LOWER(:cleanId)`,
+        { replacements: { cleanId }, type: sequelize.QueryTypes.SELECT }
+      );
+
+      if (existing.length > 0) {
+        await sequelize.query(
+          `UPDATE hundred_days_evidence
+           SET training_program = :training_program,
+               status = 'VERIFIED',
+               mentor_id = :mentorId,
+               verified_at = NOW(),
+               verification_source = 'MENTOR_MANUAL'
+           WHERE id = :id`,
+          {
+            replacements: {
+              id: existing[0].id,
+              training_program,
+              mentorId
+            },
+            type: sequelize.QueryTypes.UPDATE
+          }
+        );
+      } else {
+        await sequelize.query(
+          `INSERT INTO hundred_days_evidence
+           (student_id, training_program, status, mentor_id, verified_at, verification_source, submitted_at)
+           VALUES (:cleanId, :training_program, 'VERIFIED', :mentorId, NOW(), 'MENTOR_MANUAL', NOW())`,
+          {
+            replacements: {
+              cleanId,
+              training_program,
+              mentorId
+            },
+            type: sequelize.QueryTypes.INSERT
+          }
+        );
+      }
+
+      // 2. Scores table update
+      await sequelize.query(
+        `DELETE FROM scores WHERE LOWER(TRIM(register_number)) = LOWER(:cleanId) AND parameter = 'hundred_days'`,
+        { replacements: { cleanId }, type: sequelize.QueryTypes.DELETE }
+      );
+
+      if (marks > 0) {
+        await sequelize.query(
+          `INSERT INTO scores (register_number, academic_year, parameter, marks, semester, provisional, rule_version, calculated_at)
+           VALUES (:cleanId, 2026, 'hundred_days', :marks, 1, false, 'Mentor Assessment', NOW())`,
+          { replacements: { cleanId, marks }, type: sequelize.QueryTypes.INSERT }
+        );
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Successfully updated ${student_ids.length} student(s) to ${training_program} (${marks} Marks)`,
+      marks,
+      program: training_program,
+      updated_count: student_ids.length
+    });
+  } catch (err) {
+    console.error('[HUNDRED_DAYS] Batch evaluate error:', err.message);
+    next(err);
+  }
+});
 
 module.exports = router;

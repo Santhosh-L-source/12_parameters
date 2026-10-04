@@ -176,6 +176,15 @@ export const moduleAPI = {
 export const mentorAPI = {
   // Hundred Days
   getPendingHundredDays: () => apiRequest('/api/hundred-days/pending'),
+  getHundredDaysCohort: () => apiRequest('/api/hundred-days/cohort'),
+  batchEvaluateHundredDays: (data) => apiRequest('/api/hundred-days/batch-evaluate', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+  evaluateHundredDays: (data) => apiRequest('/api/hundred-days/evaluate', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
   verifyHundredDays: (id, action, rejection_reason = null) => apiRequest(`/api/hundred-days/${id}/verify`, {
     method: 'POST',
     body: JSON.stringify({ action, rejection_reason }),

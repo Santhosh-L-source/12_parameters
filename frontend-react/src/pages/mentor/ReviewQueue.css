@@ -593,3 +593,264 @@
     width: 100%;
   }
 }
+
+/* ==========================================================================
+   Cohort Direct Evaluation Matrix Styles
+   ========================================================================== */
+.cohort-tabs {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+  border-bottom: 2px solid #e2e8f0;
+  padding-bottom: 4px;
+}
+
+.cohort-tab-btn {
+  background: transparent;
+  border: none;
+  padding: 10px 18px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #64748b;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cohort-tab-btn:hover {
+  background: #f1f5f9;
+  color: #1e293b;
+}
+
+.cohort-tab-btn.active {
+  background: #4f46e5;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);
+}
+
+.cohort-stat-ribbon {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+.cohort-stat-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 14px 18px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: transform 0.15s ease;
+}
+
+.cohort-stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+}
+
+.cohort-stat-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+}
+
+.cohort-stat-val {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.cohort-stat-sub {
+  font-size: 0.78rem;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+/* Bulk Bar */
+.bulk-toolbar {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.bulk-actions-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.bulk-btn {
+  padding: 7px 14px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bulk-btn-elite {
+  background: #ecfdf5;
+  color: #047857;
+  border-color: #a7f3d0;
+}
+.bulk-btn-elite:hover:not(:disabled) {
+  background: #10b981;
+  color: #ffffff;
+}
+
+.bulk-btn-hope {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: #bfdbfe;
+}
+.bulk-btn-hope:hover:not(:disabled) {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.bulk-btn-pep {
+  background: #fffbeb;
+  color: #b45309;
+  border-color: #fde68a;
+}
+.bulk-btn-pep:hover:not(:disabled) {
+  background: #f59e0b;
+  color: #ffffff;
+}
+
+.bulk-btn-none {
+  background: #f1f5f9;
+  color: #475569;
+  border-color: #cbd5e1;
+}
+.bulk-btn-none:hover:not(:disabled) {
+  background: #64748b;
+  color: #ffffff;
+}
+
+.bulk-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Grading Table */
+.matrix-table-container {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+.matrix-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.9rem;
+}
+
+.matrix-table thead {
+  background: #f8fafc;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.matrix-table th {
+  padding: 14px 16px;
+  font-weight: 700;
+  color: #475569;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.matrix-table tbody tr {
+  border-bottom: 1px solid #f1f5f9;
+  transition: background 0.15s ease;
+}
+
+.matrix-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+.matrix-table tbody tr.row-selected {
+  background: #f5f3ff;
+}
+
+.matrix-table td {
+  padding: 13px 16px;
+  vertical-align: middle;
+}
+
+/* Radio Pill Group */
+.tier-pills-container {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tier-pill-btn {
+  padding: 5px 10px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.tier-pill-btn:hover {
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+.tier-pill-btn.active-elite {
+  background: #10b981;
+  color: #ffffff;
+  border-color: #059669;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);
+}
+
+.tier-pill-btn.active-hope {
+  background: #2563eb;
+  color: #ffffff;
+  border-color: #1d4ed8;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
+}
+
+.tier-pill-btn.active-pep {
+  background: #f59e0b;
+  color: #ffffff;
+  border-color: #d97706;
+  box-shadow: 0 2px 6px rgba(245, 158, 11, 0.3);
+}
+
+.tier-pill-btn.active-none {
+  background: #64748b;
+  color: #ffffff;
+  border-color: #475569;
+}
