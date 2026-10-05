@@ -710,43 +710,64 @@ router.get(
   async (req, res, next) => {
     try {
       const { studentId } = req.params;
+      const cleanId = String(studentId).trim();
 
-      // Get all VERIFIED evidence
-      const allEvidence = await sequelize.query(
-        `SELECT platform, username, total_solved, sql_solved FROM coding_problems_evidence
-         WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(:studentId)) AND status = 'VERIFIED'`,
+      // 1. Check scores table first
+      const scoreRows = await sequelize.query(
+        `SELECT marks FROM scores 
+         WHERE (LOWER(roll_number) = LOWER(:cleanId) OR LOWER(roll_number) IN (
+           SELECT LOWER(roll_number) FROM students WHERE LOWER(register_number) = LOWER(:cleanId)
+         ))
+         AND parameter_id IN ('coding_problems', 'coding')
+         ORDER BY marks DESC LIMIT 1`,
         {
-          replacements: { studentId },
+          replacements: { cleanId },
           type: sequelize.QueryTypes.SELECT
         }
       );
 
+      if (scoreRows && scoreRows.length > 0 && parseFloat(scoreRows[0].marks) > 0) {
+        return res.json({
+          success: true,
+          student_id: cleanId,
+          marks: parseFloat(scoreRows[0].marks),
+          max_marks: 25
+        });
+      }
+
+      // 2. Check evidence table
+      let allEvidence = [];
+      try {
+        allEvidence = await sequelize.query(
+          `SELECT platform, handle as username, total_solved, sql_solved FROM coding_platform_evidence
+           WHERE (LOWER(roll_number) = LOWER(:cleanId) OR LOWER(roll_number) IN (
+             SELECT LOWER(roll_number) FROM students WHERE LOWER(register_number) = LOWER(:cleanId)
+           )) AND status = 'VERIFIED'`,
+          {
+            replacements: { cleanId },
+            type: sequelize.QueryTypes.SELECT
+          }
+        );
+      } catch (e) {
+        allEvidence = [];
+      }
+
       // SUM across all platforms
-      const totalSolved = allEvidence.reduce((sum, e) => sum + e.total_solved, 0);
-      const sqlSolved = allEvidence.reduce((sum, e) => sum + e.sql_solved, 0);
+      const totalSolved = (allEvidence || []).reduce((sum, e) => sum + (e.total_solved || 0), 0);
+      const sqlSolved = (allEvidence || []).reduce((sum, e) => sum + (e.sql_solved || 0), 0);
 
       // Calculate marks
       const marks = calculateCodingProblemsMarks(totalSolved, sqlSolved);
 
-      // Determine which tier was achieved
-      let tierAchieved = null;
-      for (const tier of TIERS) {
-        if (totalSolved >= tier.total && sqlSolved >= tier.sql) {
-          tierAchieved = { total: tier.total, sql: tier.sql, marks: tier.marks };
-          break;
-        }
-      }
-
       res.json({
         success: true,
-        student_id: studentId,
+        student_id: cleanId,
         marks,
         max_marks: 25,
-        platforms_count: allEvidence.length,
+        platforms_count: allEvidence ? allEvidence.length : 0,
         total_solved_sum: totalSolved,
         sql_solved_sum: sqlSolved,
-        tier_achieved: tierAchieved,
-        platforms: allEvidence.map(e => ({
+        platforms: (allEvidence || []).map(e => ({
           platform: e.platform,
           username: e.username,
           total_solved: e.total_solved,

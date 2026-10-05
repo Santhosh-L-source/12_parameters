@@ -467,50 +467,55 @@ router.get(
   async (req, res, next) => {
     try {
       const { studentId } = req.params;
+      const cleanId = String(studentId).trim();
 
-      // Group by distinct_key_normalized (credential name), take MAX tier_marks per credential
-      const result = await sequelize.query(
-        `SELECT
-          distinct_key_normalized,
-          MAX(tier_marks) as max_tier_marks,
-          BOOL_OR(is_foundation_level) as is_foundation
-         FROM certificate_evidence
-         WHERE student_id = :studentId AND status = 'VERIFIED'
-         GROUP BY distinct_key_normalized`,
+      // 1. Check scores table first
+      const scoreRows = await sequelize.query(
+        `SELECT marks FROM scores 
+         WHERE (LOWER(roll_number) = LOWER(:cleanId) OR LOWER(roll_number) IN (
+           SELECT LOWER(roll_number) FROM students WHERE LOWER(register_number) = LOWER(:cleanId)
+         ))
+         AND parameter_id IN ('certificate', 'certificates', 'certifications')
+         ORDER BY marks DESC LIMIT 1`,
         {
-          replacements: { studentId },
+          replacements: { cleanId },
           type: sequelize.QueryTypes.SELECT
         }
       );
 
-      // Split into foundation and non-foundation
-      const foundationMarks = result
-        .filter(r => r.is_foundation)
-        .reduce((sum, r) => sum + r.max_tier_marks, 0);
+      if (scoreRows && scoreRows.length > 0 && parseFloat(scoreRows[0].marks) > 0) {
+        return res.json({
+          success: true,
+          student_id: cleanId,
+          marks: parseFloat(scoreRows[0].marks),
+          max_marks: 20
+        });
+      }
 
-      const nonFoundationMarks = result
-        .filter(r => !r.is_foundation)
-        .reduce((sum, r) => sum + r.max_tier_marks, 0);
+      // 2. Check certificate_evidence table
+      const result = await sequelize.query(
+        `SELECT DISTINCT distinct_key_normalized, certificate_name, grade_or_score
+         FROM certificate_evidence
+         WHERE (LOWER(roll_number) = LOWER(:cleanId) OR LOWER(roll_number) IN (
+           SELECT LOWER(roll_number) FROM students WHERE LOWER(register_number) = LOWER(:cleanId)
+         )) AND status = 'VERIFIED'`,
+        {
+          replacements: { cleanId },
+          type: sequelize.QueryTypes.SELECT
+        }
+      );
 
-      // Foundation sub-cap at 10
-      const cappedFoundationMarks = Math.min(10, foundationMarks);
-
-      // Total marks (foundation capped + non-foundation)
-      const totalMarks = cappedFoundationMarks + nonFoundationMarks;
-      const finalMarks = Math.min(20, totalMarks);
+      let totalMarks = 0;
+      if (result && result.length > 0) {
+        totalMarks = Math.min(20, result.length * 5);
+      }
 
       res.json({
         success: true,
-        student_id: studentId,
-        marks: finalMarks,
+        student_id: cleanId,
+        marks: totalMarks,
         max_marks: 20,
-        credentials_count: result.length,
-        foundation_credentials: result.filter(r => r.is_foundation).length,
-        non_foundation_credentials: result.filter(r => !r.is_foundation).length,
-        foundation_marks_raw: foundationMarks,
-        foundation_marks_capped: cappedFoundationMarks,
-        non_foundation_marks: nonFoundationMarks,
-        uncapped_total: cappedFoundationMarks + nonFoundationMarks
+        credentials_count: result ? result.length : 0
       });
 
     } catch (err) {

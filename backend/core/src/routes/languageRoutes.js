@@ -406,20 +406,46 @@ router.get(
   async (req, res, next) => {
     try {
       const { studentId } = req.params;
+      const cleanId = String(studentId).trim();
 
-      const evidence = await sequelize.query(
-        `SELECT proficiency_level
-         FROM language_evidence
-         WHERE student_id = :studentId
-           AND status = 'VERIFIED'
-           AND lower(trim(language)) != 'english'`,
+      // 1. Check scores table first
+      const scoreRows = await sequelize.query(
+        `SELECT marks FROM scores 
+         WHERE (LOWER(roll_number) = LOWER(:cleanId) OR LOWER(roll_number) IN (
+           SELECT LOWER(roll_number) FROM students WHERE LOWER(register_number) = LOWER(:cleanId)
+         ))
+         AND parameter_id IN ('language', 'foreign_language')
+         ORDER BY marks DESC LIMIT 1`,
         {
-          replacements: { studentId },
+          replacements: { cleanId },
           type: sequelize.QueryTypes.SELECT
         }
       );
 
-      // Calculate MAX marks (not sum)
+      if (scoreRows && scoreRows.length > 0 && parseFloat(scoreRows[0].marks) > 0) {
+        return res.json({
+          success: true,
+          student_id: cleanId,
+          marks: parseFloat(scoreRows[0].marks),
+          max_marks: 15
+        });
+      }
+
+      // 2. Check language_evidence table
+      const evidence = await sequelize.query(
+        `SELECT certification_level as proficiency_level
+         FROM language_evidence
+         WHERE (LOWER(roll_number) = LOWER(:cleanId) OR LOWER(roll_number) IN (
+           SELECT LOWER(roll_number) FROM students WHERE LOWER(register_number) = LOWER(:cleanId)
+         ))
+         AND status = 'VERIFIED'
+         AND lower(trim(language)) != 'english'`,
+        {
+          replacements: { cleanId },
+          type: sequelize.QueryTypes.SELECT
+        }
+      );
+
       let maxMarks = 0;
       for (const ev of evidence) {
         maxMarks = Math.max(maxMarks, LEVEL_MARKS[ev.proficiency_level] || 0);
@@ -427,10 +453,10 @@ router.get(
 
       res.json({
         success: true,
-        student_id: studentId,
+        student_id: cleanId,
         marks: maxMarks,
         max_marks: 15,
-        languages_count: evidence.length
+        languages_count: evidence ? evidence.length : 0
       });
 
     } catch (err) {

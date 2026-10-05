@@ -463,34 +463,55 @@ router.get(
   async (req, res, next) => {
     try {
       const { studentId } = req.params;
+      const cleanId = String(studentId).trim();
 
-      // Group by distinct_key_normalized (company name), take MAX stage_marks per company
-      const result = await sequelize.query(
-        `SELECT
-          distinct_key_normalized,
-          MAX(stage_marks) as max_stage_marks,
-          MAX(track) as track
-         FROM internship_evidence
-         WHERE student_id = :studentId AND status = 'VERIFIED'
-         GROUP BY distinct_key_normalized`,
+      // 1. Check scores table first
+      const scoreRows = await sequelize.query(
+        `SELECT marks FROM scores 
+         WHERE (LOWER(roll_number) = LOWER(:cleanId) OR LOWER(roll_number) IN (
+           SELECT LOWER(roll_number) FROM students WHERE LOWER(register_number) = LOWER(:cleanId)
+         ))
+         AND parameter_id IN ('internship', 'internship_startup')
+         ORDER BY marks DESC LIMIT 1`,
         {
-          replacements: { studentId },
+          replacements: { cleanId },
           type: sequelize.QueryTypes.SELECT
         }
       );
 
-      // Sum across distinct companies
-      const totalMarks = result.reduce((sum, row) => sum + row.max_stage_marks, 0);
-      const finalMarks = Math.min(20, totalMarks);
+      if (scoreRows && scoreRows.length > 0 && parseFloat(scoreRows[0].marks) > 0) {
+        return res.json({
+          success: true,
+          student_id: cleanId,
+          marks: parseFloat(scoreRows[0].marks),
+          max_marks: 20
+        });
+      }
+
+      // 2. Check internship_evidence table
+      const result = await sequelize.query(
+        `SELECT DISTINCT distinct_key_normalized, company_name, role, is_startup
+         FROM internship_evidence
+         WHERE (LOWER(roll_number) = LOWER(:cleanId) OR LOWER(roll_number) IN (
+           SELECT LOWER(roll_number) FROM students WHERE LOWER(register_number) = LOWER(:cleanId)
+         )) AND status = 'VERIFIED'`,
+        {
+          replacements: { cleanId },
+          type: sequelize.QueryTypes.SELECT
+        }
+      );
+
+      let totalMarks = 0;
+      if (result && result.length > 0) {
+        totalMarks = Math.min(20, result.length * 10);
+      }
 
       res.json({
         success: true,
-        student_id: studentId,
-        marks: finalMarks,
+        student_id: cleanId,
+        marks: totalMarks,
         max_marks: 20,
-        companies_count: result.length,
-        uncapped_total: totalMarks,
-        breakdown: result
+        companies_count: result ? result.length : 0
       });
 
     } catch (err) {

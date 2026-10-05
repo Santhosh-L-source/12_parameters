@@ -616,59 +616,72 @@ router.get(
   async (req, res, next) => {
     try {
       const { studentId } = req.params;
+      const cleanId = String(studentId).trim();
 
+      // 1. Check scores table first
+      const scoreRows = await sequelize.query(
+        `SELECT marks FROM scores 
+         WHERE (LOWER(roll_number) = LOWER(:cleanId) OR LOWER(roll_number) IN (
+           SELECT LOWER(roll_number) FROM students WHERE LOWER(register_number) = LOWER(:cleanId)
+         ))
+         AND parameter_id IN ('opensource', 'open_source', 'oss')
+         ORDER BY marks DESC LIMIT 1`,
+        {
+          replacements: { cleanId },
+          type: sequelize.QueryTypes.SELECT
+        }
+      );
+
+      if (scoreRows && scoreRows.length > 0 && parseFloat(scoreRows[0].marks) > 0) {
+        return res.json({
+          success: true,
+          student_id: cleanId,
+          marks: parseFloat(scoreRows[0].marks),
+          max_marks: 20
+        });
+      }
+
+      // 2. Check open_source_evidence
       const allEvidence = await sequelize.query(
         `SELECT distinct_key_normalized,
                 repo_name,
-                programme_name,
                 github_username,
                 repo_url,
                 MAX(prs_submitted) as prs_submitted,
                 MAX(prs_merged) as prs_merged,
-                BOOL_OR(programme_selected) as programme_selected,
-                BOOL_OR(is_maintainer) as is_maintainer,
-                BOOL_OR(programme_completed) as programme_completed
+                BOOL_OR(is_maintainer) as is_maintainer
          FROM open_source_evidence
-         WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(:studentId)) AND status = 'VERIFIED'
-         GROUP BY distinct_key_normalized, repo_name, programme_name, github_username, repo_url`,
+         WHERE (LOWER(roll_number) = LOWER(:cleanId) OR LOWER(roll_number) IN (
+           SELECT LOWER(roll_number) FROM students WHERE LOWER(register_number) = LOWER(:cleanId)
+         )) AND status = 'VERIFIED'
+         GROUP BY distinct_key_normalized, repo_name, github_username, repo_url`,
         {
-          replacements: { studentId },
+          replacements: { cleanId },
           type: sequelize.QueryTypes.SELECT
         }
       );
 
       let uncappedTotal = 0;
-      const repos = allEvidence.map(e => {
+      (allEvidence || []).forEach(e => {
         const stage = calculateStage(
           e.prs_submitted || 0,
           e.prs_merged || 0,
-          e.programme_selected || false,
+          false,
           e.is_maintainer || false,
-          e.programme_completed || false
+          false
         );
         uncappedTotal += stage;
-        return {
-          repo: e.repo_name,
-          programme: e.programme_name,
-          github_username: e.github_username,
-          repo_url: e.repo_url,
-          prs_submitted: e.prs_submitted || 0,
-          prs_merged: e.prs_merged || 0,
-          is_maintainer: e.is_maintainer || false,
-          stage_marks: stage
-        };
       });
 
       const finalMarks = Math.min(20, uncappedTotal);
 
       res.json({
         success: true,
-        student_id: studentId,
+        student_id: cleanId,
         marks: finalMarks,
         max_marks: 20,
         uncapped_total: uncappedTotal,
-        repos_count: allEvidence.length,
-        repos
+        repos_count: allEvidence ? allEvidence.length : 0
       });
 
     } catch (err) {

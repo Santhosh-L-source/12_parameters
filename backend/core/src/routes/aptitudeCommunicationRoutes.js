@@ -236,19 +236,54 @@ router.post('/:id/verify', authenticate, [
 router.get('/marks/:studentId', authenticate, [param('studentId').notEmpty()], validate, async (req, res, next) => {
   try {
     const { studentId } = req.params;
-    const allEvidence = await sequelize.query(
-      `SELECT * FROM aptitude_communication_evidence WHERE student_id = :studentId AND status = 'VERIFIED'`,
-      { replacements: { studentId }, type: sequelize.QueryTypes.SELECT }
+    const cleanId = String(studentId).trim();
+
+    // 1. Check scores table first
+    const scoreRows = await sequelize.query(
+      `SELECT marks FROM scores 
+       WHERE (LOWER(roll_number) = LOWER(:cleanId) OR LOWER(roll_number) IN (
+         SELECT LOWER(roll_number) FROM students WHERE LOWER(register_number) = LOWER(:cleanId)
+       ))
+       AND parameter_id IN ('aptitude', 'aptitude_communication', 'aptitude-communication')
+       ORDER BY marks DESC LIMIT 1`,
+      {
+        replacements: { cleanId },
+        type: sequelize.QueryTypes.SELECT
+      }
     );
-    const aptEvidence = allEvidence.filter(e => e.evidence_category === 'APTITUDE');
+
+    if (scoreRows && scoreRows.length > 0 && parseFloat(scoreRows[0].marks) > 0) {
+      return res.json({
+        success: true,
+        student_id: cleanId,
+        marks: parseFloat(scoreRows[0].marks),
+        max_marks: 20
+      });
+    }
+
+    // 2. Check evidence if exists
+    let allEvidence = [];
+    try {
+      allEvidence = await sequelize.query(
+        `SELECT * FROM aptitude_communication_evidence 
+         WHERE (LOWER(roll_number) = LOWER(:cleanId) OR LOWER(roll_number) IN (
+           SELECT LOWER(roll_number) FROM students WHERE LOWER(register_number) = LOWER(:cleanId)
+         )) AND status = 'VERIFIED'`,
+        { replacements: { cleanId }, type: sequelize.QueryTypes.SELECT }
+      );
+    } catch (e) {
+      allEvidence = [];
+    }
+
+    const aptEvidence = (allEvidence || []).filter(e => e.evidence_category === 'APTITUDE');
     let bestApt = 0, bestPercentile = null;
     aptEvidence.forEach(e => { const m = calculateAptitudeMarks(e.test_completed, e.percentile); if (m > bestApt) { bestApt = m; bestPercentile = e.percentile; } });
-    const commEvidence = allEvidence.filter(e => e.evidence_category === 'COMMUNICATION');
+    const commEvidence = (allEvidence || []).filter(e => e.evidence_category === 'COMMUNICATION');
     let bestComm = 0, hasThreshold = false;
     commEvidence.forEach(e => { const m = calculateCommunicationMarks(e.has_valid_scorecard, e.meets_central_threshold); if (m > bestComm) { bestComm = m; hasThreshold = e.meets_central_threshold; } });
     const uncapped = bestApt + bestComm;
     const final = Math.min(20, uncapped);
-    res.json({ success: true, student_id: studentId, marks: final, max_marks: 20, aptitude_marks: bestApt, aptitude_max: 15, aptitude_submissions: aptEvidence.length, aptitude_best_percentile: bestPercentile, communication_marks: bestComm, communication_max: 5, communication_submissions: commEvidence.length, communication_threshold_met: hasThreshold, uncapped_total: uncapped });
+    res.json({ success: true, student_id: cleanId, marks: final, max_marks: 20, aptitude_marks: bestApt, aptitude_max: 15, aptitude_submissions: aptEvidence.length, aptitude_best_percentile: bestPercentile, communication_marks: bestComm, communication_max: 5, communication_submissions: commEvidence.length, communication_threshold_met: hasThreshold, uncapped_total: uncapped });
   } catch (err) { next(err); }
 });
 

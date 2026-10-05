@@ -356,12 +356,39 @@ router.get(
   async (req, res, next) => {
     try {
       const { studentId } = req.params;
+      const cleanId = String(studentId).trim();
 
-      const allEvidence = await sequelize.query(
-        `SELECT platform, username, current_rating FROM cp_rating_evidence
-         WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(:studentId)) AND status = 'VERIFIED'`,
+      // 1. Check scores table first
+      const scoreRows = await sequelize.query(
+        `SELECT marks FROM scores 
+         WHERE (LOWER(roll_number) = LOWER(:cleanId) OR LOWER(roll_number) IN (
+           SELECT LOWER(roll_number) FROM students WHERE LOWER(register_number) = LOWER(:cleanId)
+         ))
+         AND parameter_id IN ('cp_rating', 'cp')
+         ORDER BY marks DESC LIMIT 1`,
         {
-          replacements: { studentId },
+          replacements: { cleanId },
+          type: sequelize.QueryTypes.SELECT
+        }
+      );
+
+      if (scoreRows && scoreRows.length > 0 && parseFloat(scoreRows[0].marks) > 0) {
+        return res.json({
+          success: true,
+          student_id: cleanId,
+          marks: parseFloat(scoreRows[0].marks),
+          max_marks: 20
+        });
+      }
+
+      // 2. Check cp_rating_evidence
+      const allEvidence = await sequelize.query(
+        `SELECT platform, handle as username, current_rating FROM cp_rating_evidence
+         WHERE (LOWER(roll_number) = LOWER(:cleanId) OR LOWER(roll_number) IN (
+           SELECT LOWER(roll_number) FROM students WHERE LOWER(register_number) = LOWER(:cleanId)
+         )) AND status = 'VERIFIED'`,
+        {
+          replacements: { cleanId },
           type: sequelize.QueryTypes.SELECT
         }
       );
@@ -369,37 +396,24 @@ router.get(
       let bestMarks = 0;
       let bestPlatform = null;
       let bestRating = 0;
-      let bestTier = null;
 
-      const platformResults = await Promise.all(
-        allEvidence.map(async (e) => {
-          const result = await calculatePlatformMarks(e.platform, e.current_rating);
-          if (result.marks > bestMarks) {
-            bestMarks = result.marks;
-            bestPlatform = e.platform;
-            bestRating = e.current_rating;
-            bestTier = result.tier_name;
-          }
-          return {
-            platform: e.platform,
-            username: e.username,
-            rating: e.current_rating,
-            marks: result.marks,
-            tier: result.tier_name
-          };
-        })
-      );
+      for (const e of (allEvidence || [])) {
+        const result = await calculatePlatformMarks(e.platform, e.current_rating);
+        if (result.marks > bestMarks) {
+          bestMarks = result.marks;
+          bestPlatform = e.platform;
+          bestRating = e.current_rating;
+        }
+      }
 
       res.json({
         success: true,
-        student_id: studentId,
+        student_id: cleanId,
         marks: bestMarks,
         max_marks: 20,
-        platforms_count: allEvidence.length,
+        platforms_count: allEvidence ? allEvidence.length : 0,
         best_platform: bestPlatform,
-        best_rating: bestRating,
-        best_tier: bestTier,
-        platforms: platformResults
+        best_rating: bestRating
       });
 
     } catch (err) {

@@ -485,36 +485,67 @@ router.get(
   async (req, res, next) => {
     try {
       const { studentId } = req.params;
+      const cleanId = String(studentId).trim();
 
+      // 1. Check scores table first
+      const scoreRows = await sequelize.query(
+        `SELECT marks FROM scores 
+         WHERE (LOWER(roll_number) = LOWER(:cleanId) OR LOWER(roll_number) IN (
+           SELECT LOWER(roll_number) FROM students WHERE LOWER(register_number) = LOWER(:cleanId)
+         ))
+         AND parameter_id IN ('gate', 'gate_exam')
+         ORDER BY marks DESC LIMIT 1`,
+        {
+          replacements: { cleanId },
+          type: sequelize.QueryTypes.SELECT
+        }
+      );
+
+      if (scoreRows && scoreRows.length > 0 && parseFloat(scoreRows[0].marks) > 0) {
+        return res.json({
+          success: true,
+          student_id: cleanId,
+          marks: parseFloat(scoreRows[0].marks),
+          total_marks: parseFloat(scoreRows[0].marks),
+          max_marks: 25
+        });
+      }
+
+      // 2. Check gate_exam_evidence table
       const allEvidence = await sequelize.query(
         `SELECT * FROM gate_exam_evidence
-         WHERE student_id = :studentId AND status = 'VERIFIED'`,
+         WHERE (LOWER(roll_number) = LOWER(:cleanId) OR LOWER(roll_number) IN (
+           SELECT LOWER(roll_number) FROM students WHERE LOWER(register_number) = LOWER(:cleanId)
+         )) AND status = 'VERIFIED'`,
         {
-          replacements: { studentId },
+          replacements: { cleanId },
           type: sequelize.QueryTypes.SELECT
         }
       );
 
       // Calculate best core marks
       let bestCore = 0;
-      for (const ev of allEvidence) {
+      for (const ev of (allEvidence || [])) {
         if (!ev.is_bonus_exam) {
-          // Get branch threshold
           let branchThreshold = null;
           if (ev.gate_score && ev.branch_code) {
-            const calibration = await sequelize.query(
-              `SELECT threshold_score FROM gate_branch_calibration
-               WHERE branch = :branch AND year = :year`,
-              {
-                replacements: {
-                  branch: ev.branch_code,
-                  year: ev.exam_year || new Date().getFullYear()
-                },
-                type: sequelize.QueryTypes.SELECT
+            try {
+              const calibration = await sequelize.query(
+                `SELECT threshold_score FROM gate_branch_calibration
+                 WHERE branch = :branch AND year = :year`,
+                {
+                  replacements: {
+                    branch: ev.branch_code,
+                    year: ev.exam_year || new Date().getFullYear()
+                  },
+                  type: sequelize.QueryTypes.SELECT
+                }
+              );
+              if (calibration.length > 0) {
+                branchThreshold = parseFloat(calibration[0].threshold_score);
               }
-            );
-            if (calibration.length > 0) {
-              branchThreshold = parseFloat(calibration[0].threshold_score);
+            } catch (calErr) {
+              // fallback
             }
           }
 
@@ -526,7 +557,7 @@ router.get(
       // Calculate bonus (only if core >= 5)
       let bonus = 0;
       if (bestCore >= 5) {
-        for (const ev of allEvidence) {
+        for (const ev of (allEvidence || [])) {
           if (ev.is_bonus_exam) {
             if (['GRE', 'GMAT', 'CAT'].includes(ev.exam_type)) {
               bonus = Math.max(bonus, 3);
@@ -541,12 +572,13 @@ router.get(
 
       res.json({
         success: true,
-        student_id: studentId,
+        student_id: cleanId,
+        marks: finalMarks,
         core_marks: bestCore,
         bonus_marks: bonus,
         total_marks: finalMarks,
         max_marks: 25,
-        exams_count: allEvidence.length
+        exams_count: allEvidence ? allEvidence.length : 0
       });
 
     } catch (err) {

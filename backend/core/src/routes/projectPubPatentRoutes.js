@@ -299,24 +299,59 @@ router.get(
   validate,
   async (req, res, next) => {
     try {
-      const evidence = await ProjectPubPatentEvidence.findAll({
-        where: {
-          studentId: req.params.studentId,
-          status: 'VERIFIED',
-        },
-      });
+      const studentId = req.params.studentId;
+      const cleanId = String(studentId).trim();
 
-      const marks = calculateAccumulativeScore(evidence, 'outputName', MAX_MARKS);
+      // 1. Check scores table first
+      const scoreRows = await sequelize.query(
+        `SELECT marks FROM scores 
+         WHERE (LOWER(roll_number) = LOWER(:cleanId) OR LOWER(roll_number) IN (
+           SELECT LOWER(roll_number) FROM students WHERE LOWER(register_number) = LOWER(:cleanId)
+         ))
+         AND parameter_id IN ('project', 'project_pub_patent', 'proj_score')
+         ORDER BY marks DESC LIMIT 1`,
+        {
+          replacements: { cleanId },
+          type: sequelize.QueryTypes.SELECT
+        }
+      );
+
+      if (scoreRows && scoreRows.length > 0 && parseFloat(scoreRows[0].marks) > 0) {
+        return res.json({
+          success: true,
+          student_id: cleanId,
+          marks: parseFloat(scoreRows[0].marks),
+          max_marks: MAX_MARKS
+        });
+      }
+
+      // 2. Check project_evidence
+      const evidence = await sequelize.query(
+        `SELECT DISTINCT distinct_key_normalized, title, type
+         FROM project_evidence
+         WHERE (LOWER(roll_number) = LOWER(:cleanId) OR LOWER(roll_number) IN (
+           SELECT LOWER(roll_number) FROM students WHERE LOWER(register_number) = LOWER(:cleanId)
+         )) AND status = 'VERIFIED'`,
+        {
+          replacements: { cleanId },
+          type: sequelize.QueryTypes.SELECT
+        }
+      );
+
+      let marks = 0;
+      if (evidence && evidence.length > 0) {
+        marks = Math.min(MAX_MARKS, evidence.length * 10);
+      }
 
       res.json({
         success: true,
-        studentId: req.params.studentId,
-        student_id: req.params.studentId,
+        student_id: cleanId,
+        studentId: cleanId,
         module: 'Project/Publication/Patent',
         maxMarks: MAX_MARKS,
         max_marks: MAX_MARKS,
         marks,
-        evidenceCount: evidence.length,
+        evidenceCount: evidence ? evidence.length : 0,
       });
     } catch (err) {
       next(err);
