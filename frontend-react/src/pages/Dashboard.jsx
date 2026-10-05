@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
-import { moduleAPI } from '../services/api';
+import { moduleAPI, studentAPI } from '../services/api';
 import { getStudent } from '../utils/auth';
 import './Dashboard.css';
 
@@ -12,6 +12,34 @@ const TIERS = [
   { name: 'Level 3', min: 160, max: 199, color: '#7c3aed', badge: '🔥 Level 3' },
   { name: 'Elite Tier', min: 200, max: 250, color: '#d97706', badge: '👑 Elite' },
 ];
+
+const PARAM_TO_MODULE = {
+  'hundred_days': 'hundred-days',
+  '100_days': 'hundred-days',
+  'hundred-days': 'hundred-days',
+  'language': 'language',
+  'gate': 'gate',
+  'gate_exam': 'gate',
+  'competition': 'competition',
+  'internship': 'internship',
+  'certificate': 'certificate',
+  'aptitude': 'aptitude-communication',
+  'aptitude_communication': 'aptitude-communication',
+  'aptitude-communication': 'aptitude-communication',
+  'coding_problems': 'coding-problems',
+  'coding-problems': 'coding-problems',
+  'cp_rating': 'cp-rating',
+  'cp-rating': 'cp-rating',
+  'open_source': 'open-source',
+  'open-source': 'open-source',
+  'opensource': 'open-source',
+  'monthly_coding': 'monthly-coding',
+  'monthly-coding': 'monthly-coding',
+  'month_score': 'monthly-coding',
+  'project': 'project-pub-patent',
+  'project_pub_patent': 'project-pub-patent',
+  'project-pub-patent': 'project-pub-patent',
+};
 
 const getGreeting = () => {
   const hour = new Date().getHours();
@@ -172,44 +200,70 @@ const Dashboard = () => {
       return;
     }
 
-    let total = 0;
     const updatedModules = [...modules];
-
-    const apiMap = {
-      'hundred-days': moduleAPI.getHundredDaysMarks,
-      'language': moduleAPI.getLanguageMarks,
-      'gate': moduleAPI.getGateMarks,
-      'competition': moduleAPI.getCompetitionMarks,
-      'internship': moduleAPI.getInternshipMarks,
-      'certificate': moduleAPI.getCertificateMarks,
-      'aptitude-communication': moduleAPI.getAptitudeMarks,
-      'coding-problems': moduleAPI.getCodingProblemsMarks,
-      'cp-rating': moduleAPI.getCPRatingMarks,
-      'open-source': moduleAPI.getOpenSourceMarks,
-      'monthly-coding': moduleAPI.getMonthlyCodingMarks,
-      'project-pub-patent': moduleAPI.getProjectPubPatentMarks,
-    };
+    const marksMap = {};
 
     try {
-      const results = await Promise.allSettled(
-        updatedModules.map(async (mod) => {
-          const fetcher = apiMap[mod.id];
-          if (fetcher) {
-            const data = await fetcher(rollNumber);
-            const marks = typeof data?.marks === 'number' ? data.marks : (typeof data === 'number' ? data : 0);
-            return { id: mod.id, marks };
-          }
-          return { id: mod.id, marks: 0 };
-        })
-      );
-
-      results.forEach((res, i) => {
-        if (res.status === 'fulfilled') {
-          const marks = res.value.marks || 0;
-          updatedModules[i].currentMarks = marks;
-          updatedModules[i].status = marks > 0 ? 'verified' : 'not-started';
-          total += marks;
+      // 1. First fetch master scores directly from scores database table
+      try {
+        const scoresRes = await studentAPI.getScores();
+        if (scoresRes?.success && Array.isArray(scoresRes.scores)) {
+          scoresRes.scores.forEach((s) => {
+            const paramKey = (s.parameter || s.parameter_id || '').toLowerCase().trim();
+            const modId = PARAM_TO_MODULE[paramKey] || paramKey;
+            const mVal = parseFloat(s.marks || 0);
+            if (mVal > 0) {
+              marksMap[modId] = Math.max(marksMap[modId] || 0, mVal);
+            }
+          });
         }
+      } catch (scoreErr) {
+        console.warn('Student score overview fallback:', scoreErr);
+      }
+
+      // 2. Query individual module endpoints for missing/additional verification
+      const apiMap = {
+        'hundred-days': moduleAPI.getHundredDaysMarks,
+        'language': moduleAPI.getLanguageMarks,
+        'gate': moduleAPI.getGateMarks,
+        'competition': moduleAPI.getCompetitionMarks,
+        'internship': moduleAPI.getInternshipMarks,
+        'certificate': moduleAPI.getCertificateMarks,
+        'aptitude-communication': moduleAPI.getAptitudeMarks,
+        'coding-problems': moduleAPI.getCodingProblemsMarks,
+        'cp-rating': moduleAPI.getCPRatingMarks,
+        'open-source': moduleAPI.getOpenSourceMarks,
+        'monthly-coding': moduleAPI.getMonthlyCodingMarks,
+        'project-pub-patent': moduleAPI.getProjectPubPatentMarks,
+      };
+
+      const pendingModules = updatedModules.filter((m) => !marksMap[m.id]);
+      if (pendingModules.length > 0) {
+        const results = await Promise.allSettled(
+          pendingModules.map(async (mod) => {
+            const fetcher = apiMap[mod.id];
+            if (fetcher) {
+              const data = await fetcher(rollNumber);
+              const marks = typeof data?.marks === 'number' ? data.marks : (typeof data === 'number' ? data : 0);
+              return { id: mod.id, marks };
+            }
+            return { id: mod.id, marks: 0 };
+          })
+        );
+
+        results.forEach((res) => {
+          if (res.status === 'fulfilled' && res.value.marks > 0) {
+            marksMap[res.value.id] = Math.max(marksMap[res.value.id] || 0, res.value.marks);
+          }
+        });
+      }
+
+      let total = 0;
+      updatedModules.forEach((m) => {
+        const marks = marksMap[m.id] || 0;
+        m.currentMarks = marks;
+        m.status = marks > 0 ? 'verified' : 'not-started';
+        total += marks;
       });
 
       setModules(updatedModules);

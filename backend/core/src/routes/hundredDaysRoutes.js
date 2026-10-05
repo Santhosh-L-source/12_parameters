@@ -365,28 +365,57 @@ router.get(
   async (req, res, next) => {
     try {
       const { studentId } = req.params;
+      const cleanId = String(studentId).trim();
 
-      const evidence = await sequelize.query(
-        `SELECT training_program, status
-         FROM hundred_days_evidence
-         WHERE student_id = :studentId AND status = 'VERIFIED'`,
+      // 1. Check scores table first
+      const scoreRows = await sequelize.query(
+        `SELECT marks FROM scores 
+         WHERE (LOWER(roll_number) = LOWER(:cleanId) OR LOWER(roll_number) IN (
+           SELECT LOWER(roll_number) FROM students WHERE LOWER(register_number) = LOWER(:cleanId)
+         ))
+         AND parameter_id IN ('hundred_days', '100_days')
+         ORDER BY marks DESC LIMIT 1`,
         {
-          replacements: { studentId },
+          replacements: { cleanId },
+          type: sequelize.QueryTypes.SELECT
+        }
+      );
+
+      if (scoreRows && scoreRows.length > 0 && parseFloat(scoreRows[0].marks) > 0) {
+        return res.json({
+          success: true,
+          student_id: cleanId,
+          marks: parseFloat(scoreRows[0].marks),
+          max_marks: 15
+        });
+      }
+
+      // 2. Check hundred_days_evidence
+      const evidence = await sequelize.query(
+        `SELECT programme_type, status
+         FROM hundred_days_evidence
+         WHERE (LOWER(roll_number) = LOWER(:cleanId) OR LOWER(roll_number) IN (
+           SELECT LOWER(roll_number) FROM students WHERE LOWER(register_number) = LOWER(:cleanId)
+         )) AND status = 'VERIFIED'
+         LIMIT 1`,
+        {
+          replacements: { cleanId },
           type: sequelize.QueryTypes.SELECT
         }
       );
 
       let marks = 0;
-      if (evidence.length > 0) {
-        marks = PROGRAM_MARKS[evidence[0].training_program] || 0;
+      if (evidence && evidence.length > 0) {
+        const prog = evidence[0].programme_type;
+        marks = prog === 'HOPE_ELITE' ? 15 : (prog === 'HOPE_NON_ELITE' ? 10 : (prog === 'PEP' ? 5 : 0));
       }
 
       res.json({
         success: true,
-        student_id: studentId,
+        student_id: cleanId,
         marks,
         max_marks: 15,
-        program: evidence.length > 0 ? evidence[0].training_program : null
+        program: evidence && evidence.length > 0 ? evidence[0].programme_type : null
       });
 
     } catch (err) {

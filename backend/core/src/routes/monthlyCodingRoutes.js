@@ -564,31 +564,58 @@ router.get(
   async (req, res, next) => {
     try {
       const { studentId } = req.params;
+      const cleanId = String(studentId).trim();
 
-      const verifiedList = await sequelize.query(
-        `SELECT percentage FROM monthly_coding_evidence
-         WHERE student_id = :studentId AND status = 'VERIFIED'`,
+      // 1. Check scores table first
+      const scoreRows = await sequelize.query(
+        `SELECT marks FROM scores 
+         WHERE (LOWER(roll_number) = LOWER(:cleanId) OR LOWER(roll_number) IN (
+           SELECT LOWER(roll_number) FROM students WHERE LOWER(register_number) = LOWER(:cleanId)
+         ))
+         AND parameter_id IN ('monthly_coding', 'month_score')
+         ORDER BY marks DESC LIMIT 1`,
         {
-          replacements: { studentId },
+          replacements: { cleanId },
+          type: sequelize.QueryTypes.SELECT
+        }
+      );
+
+      if (scoreRows && scoreRows.length > 0 && parseFloat(scoreRows[0].marks) > 0) {
+        return res.json({
+          success: true,
+          student_id: cleanId,
+          marks: parseFloat(scoreRows[0].marks),
+          max_marks: 20
+        });
+      }
+
+      // 2. Check monthly_coding_evidence
+      const verifiedList = await sequelize.query(
+        `SELECT score, percentile FROM monthly_coding_evidence
+         WHERE (LOWER(roll_number) = LOWER(:cleanId) OR LOWER(roll_number) IN (
+           SELECT LOWER(roll_number) FROM students WHERE LOWER(register_number) = LOWER(:cleanId)
+         )) AND status = 'VERIFIED'`,
+        {
+          replacements: { cleanId },
           type: sequelize.QueryTypes.SELECT
         }
       );
 
       let finalMarks = 0;
       let avgPercentage = 0;
-      if (verifiedList.length > 0) {
-        const sum = verifiedList.reduce((acc, row) => acc + parseFloat(row.percentage || 0), 0);
+      if (verifiedList && verifiedList.length > 0) {
+        const sum = verifiedList.reduce((acc, row) => acc + parseFloat(row.score || row.percentile || 0), 0);
         avgPercentage = +(sum / verifiedList.length).toFixed(2);
         finalMarks = calculateMonthlyCodingMarks(avgPercentage);
       }
 
       res.json({
         success: true,
-        student_id: studentId,
+        student_id: cleanId,
         marks: finalMarks,
         max_marks: 20,
         average_percentage: avgPercentage,
-        assessments_count: verifiedList.length
+        assessments_count: verifiedList ? verifiedList.length : 0
       });
 
     } catch (err) {

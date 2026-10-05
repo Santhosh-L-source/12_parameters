@@ -56,6 +56,14 @@ export const authAPI = {
   },
 };
 
+// Student API
+export const studentAPI = {
+  getDashboard: () => apiRequest('/api/student/dashboard'),
+  getProfile: () => apiRequest('/api/student/profile'),
+  getScores: () => apiRequest('/api/student/scores'),
+  getMarks: () => apiRequest('/api/student/marks'),
+};
+
 // Module APIs
 export const moduleAPI = {
   // Hundred Days
