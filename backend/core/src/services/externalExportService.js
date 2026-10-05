@@ -168,22 +168,44 @@ const externalExportService = {
   },
 
   /**
-   * Bulk Export with Department & Batch filtering and pagination
+   * Bulk Export with Year (2nd/3rd Year), Semester, Department & Batch filtering and pagination
    */
-  async getBulkResults({ department, batch, page = 1, limit = 50 }) {
+  async getBulkResults({ department, batch, year, semester, page = 1, limit = 50 }) {
     const offset = (Math.max(1, parseInt(page, 10)) - 1) * Math.max(1, parseInt(limit, 10));
     const cleanLimit = Math.min(Math.max(1, parseInt(limit, 10)), 200);
 
     let whereConditions = [];
     const replacements = { limit: cleanLimit, offset };
 
-    if (department) {
+    if (department && department.toUpperCase() !== 'ALL') {
       whereConditions.push("LOWER(TRIM(department)) = LOWER(TRIM(:department))");
       replacements.department = department.trim();
     }
-    if (batch) {
-      whereConditions.push("LOWER(TRIM(batch)) = LOWER(TRIM(:batch))");
+
+    if (batch && batch.toUpperCase() !== 'ALL') {
+      whereConditions.push("(LOWER(TRIM(batch)) = LOWER(TRIM(:batch)) OR LOWER(TRIM(batch)) LIKE :batchLike)");
       replacements.batch = batch.trim();
+      replacements.batchLike = `%${batch.trim().toLowerCase()}%`;
+    }
+
+    // Filter by year: 3 (3rd year / 2028 batch) or 2 (2nd year / 2029 batch)
+    if (year) {
+      const yStr = String(year).toLowerCase().trim();
+      if (yStr === '3' || yStr === '3rd' || yStr === '2028' || yStr.includes('3rd') || yStr.includes('2028')) {
+        whereConditions.push("(LOWER(batch) LIKE '%2028%' OR roll_number LIKE '24%' OR roll_number LIKE '24CS%' OR roll_number LIKE '24AD%' OR roll_number LIKE '24IT%' OR roll_number LIKE '24EC%')");
+      } else if (yStr === '2' || yStr === '2nd' || yStr === '2029' || yStr.includes('2nd') || yStr.includes('2029')) {
+        whereConditions.push("(LOWER(batch) LIKE '%2029%' OR roll_number LIKE '25%' OR roll_number LIKE '25CS%' OR roll_number LIKE '25AD%' OR roll_number LIKE '25IT%' OR roll_number LIKE '25EC%')");
+      }
+    }
+
+    // Filter by semester
+    if (semester) {
+      const sNum = parseInt(semester, 10);
+      if (sNum === 5 || sNum === 6) {
+        whereConditions.push("(LOWER(batch) LIKE '%2028%' OR roll_number LIKE '24%')");
+      } else if (sNum === 3 || sNum === 4) {
+        whereConditions.push("(LOWER(batch) LIKE '%2029%' OR roll_number LIKE '25%')");
+      }
     }
 
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
@@ -235,6 +257,12 @@ const externalExportService = {
       total: totalRecords,
       page: parseInt(page, 10),
       limit: cleanLimit,
+      filter: {
+        year: year || null,
+        semester: semester || null,
+        department: department || null,
+        batch: batch || null
+      },
       students
     };
   },

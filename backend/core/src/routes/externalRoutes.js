@@ -18,7 +18,7 @@ function validate(req, res, next) {
 
 /**
  * GET /api/v1/external/students/results
- * Bulk Student Results Export with pagination and department/batch filters
+ * Bulk Student Results Export with pagination, year (2nd/3rd year), semester, and department/batch filters
  */
 router.get(
   '/students/results',
@@ -27,14 +27,18 @@ router.get(
     query('limit').optional().isInt({ min: 1, max: 200 }).withMessage('limit must be between 1 and 200'),
     query('department').optional().isString().trim(),
     query('batch').optional().isString().trim(),
+    query('year').optional().isString().trim(),
+    query('semester').optional().isString().trim(),
   ],
   validate,
   async (req, res) => {
     try {
-      const { department, batch, page = 1, limit = 50 } = req.query;
+      const { department, batch, year, semester, page = 1, limit = 50 } = req.query;
       const result = await externalExportService.getBulkResults({
         department,
         batch,
+        year,
+        semester,
         page,
         limit,
       });
