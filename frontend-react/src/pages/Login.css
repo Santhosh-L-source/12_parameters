@@ -151,19 +151,24 @@
   background: transparent;
   border: none;
   cursor: pointer;
-  color: #86868b;
+  color: #64748b;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 4px;
-  border-radius: 4px;
-  transition: color 0.2s, background-color 0.2s;
+  padding: 6px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
   z-index: 2;
 }
 
 .password-toggle-btn:hover {
-  color: #1d1d1f;
-  background-color: #f5f5f7;
+  color: #1e293b;
+  background-color: #f1f5f9;
+}
+
+.password-toggle-btn:focus-visible {
+  outline: 2px solid #5856d6;
+  outline-offset: 1px;
 }
 
 .login-btn {
