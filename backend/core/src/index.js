@@ -19,6 +19,7 @@ const authRoutes = require('./routes/authRoutes');
 const studentRoutes = require('./routes/studentRoutes');
 const anomalyRoutes = require('./routes/anomalyRoutes');
 const mentorRoutes = require('./routes/mentorRoutes');
+const externalRoutes = require('./routes/externalRoutes');
 
 const path = require('path');
 const os = require('os');
@@ -54,6 +55,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/student', studentRoutes);
 app.use('/api/mentor', mentorRoutes);
 app.use('/api/anomaly', anomalyRoutes);
+app.use('/api/v1/external', externalRoutes);
+
 
 app.get('/', (req, res) => {
   res.json({ success: true, status: 'ok', message: 'HOPE 12-Parameters Academic Backend Service' });

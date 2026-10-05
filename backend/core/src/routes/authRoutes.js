@@ -61,22 +61,24 @@ router.post(
 
       console.log(`[LOGIN] Attempt for username: ${cleanUsername}`);
 
-      // Find user by id_number (roll_number), register_number or email (Case-Insensitive)
-      const profiles = await sequelize.query(
-        `SELECT
-          id_number,
-          register_number,
-          name,
-          email,
-          department,
-          college,
-          password_hash,
-          role,
-          created_at
-        FROM profiles
-        WHERE LOWER(TRIM(id_number)) = LOWER(:cleanUsername) 
-           OR LOWER(TRIM(email)) = LOWER(:cleanUsername) 
-           OR LOWER(TRIM(register_number)) = LOWER(:cleanUsername)`,
+      // Find user in students, mentors, or admins by roll_number, register_number or email (Case-Insensitive)
+      const users = await sequelize.query(
+        `SELECT roll_number, register_number, name, email, department, COALESCE(role, 'student') as role, password_hash, created_at 
+         FROM students
+         WHERE LOWER(TRIM(roll_number)) = LOWER(:cleanUsername) 
+            OR LOWER(TRIM(email)) = LOWER(:cleanUsername) 
+            OR LOWER(TRIM(register_number)) = LOWER(:cleanUsername)
+         UNION ALL
+         SELECT roll_number, NULL AS register_number, name, email, department, COALESCE(role, 'mentor') as role, password_hash, created_at 
+         FROM mentors
+         WHERE LOWER(TRIM(roll_number)) = LOWER(:cleanUsername) 
+            OR LOWER(TRIM(email)) = LOWER(:cleanUsername)
+         UNION ALL
+         SELECT roll_number, NULL AS register_number, name, email, department, COALESCE(role, 'admin') as role, password_hash, created_at 
+         FROM admins
+         WHERE LOWER(TRIM(roll_number)) = LOWER(:cleanUsername) 
+            OR LOWER(TRIM(email)) = LOWER(:cleanUsername)
+         LIMIT 1`,
         {
           replacements: { cleanUsername },
           type: sequelize.QueryTypes.SELECT
@@ -84,7 +86,7 @@ router.post(
       );
 
       // Check if user exists
-      if (!profiles || profiles.length === 0) {
+      if (!users || users.length === 0) {
         console.log(`[LOGIN] User not found: ${cleanUsername}`);
         return res.status(401).json({
           success: false,
@@ -93,7 +95,7 @@ router.post(
         });
       }
 
-      const user = profiles[0];
+      const user = users[0];
 
       // Verify password
       // Check if password is bcrypt hash (starts with $2a$, $2b$, or $2y$) or plain text
@@ -120,8 +122,8 @@ router.post(
       // Generate JWT token
       const token = jwt.sign(
         {
-          roll_number: user.id_number,  // For backwards compatibility
-          id_number: user.id_number,
+          roll_number: user.roll_number,
+          id_number: user.roll_number,
           register_number: user.register_number,
           name: user.name,
           department: user.department,
@@ -141,23 +143,21 @@ router.post(
         message: 'Login successful',
         token,
         user: {
-          id_number: user.id_number,
-          roll_number: user.id_number,
+          id_number: user.roll_number,
+          roll_number: user.roll_number,
           name: user.name,
           register_number: user.register_number,
           email: user.email,
           department: user.department,
-          college: user.college,
           role: user.role || 'student',
           created_at: user.created_at
         },
         student: {
-          roll_number: user.id_number,  // For backwards compatibility
+          roll_number: user.roll_number,
           name: user.name,
           register_number: user.register_number,
           email: user.email,
           department: user.department,
-          college: user.college,
           role: user.role || 'student',
           created_at: user.created_at
         }

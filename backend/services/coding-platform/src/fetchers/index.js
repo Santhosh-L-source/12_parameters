@@ -29,7 +29,8 @@ function getFetcher(platform) {
   return (profileUrl) => breaker.fire(profileUrl);
 }
 
-const { verifyPlatformOwnership, verifyLeetCodeOwnership } = require('./ownershipVerifier');
+const { verifyPlatformOwnership } = require('./ownershipVerifier');
 
 module.exports = { getFetcher, fetcherMap, verifyLeetCodeOwnership, verifyPlatformOwnership };
+
 
