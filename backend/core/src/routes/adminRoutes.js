@@ -615,42 +615,44 @@ router.get('/student-scores', async (req, res) => {
     // 1. Fetch all students
     let studentQuery = `
       SELECT 
-        p.id_number,
-        p.register_number,
-        p.name,
-        p.email,
-        p.department,
-        p.college,
-        p.assigned_mentor_id,
+        s.roll_number as id_number,
+        s.roll_number,
+        s.register_number,
+        s.name,
+        s.email,
+        s.department,
+        s.batch,
+        s.year_of_study,
+        s.mentor_roll_number as assigned_mentor_id,
         m.name AS assigned_mentor_name
-      FROM profiles p
-      LEFT JOIN profiles m ON p.assigned_mentor_id = m.id_number
-      WHERE p.role = 'student'
+      FROM students s
+      LEFT JOIN mentors m ON s.mentor_roll_number = m.roll_number
+      WHERE 1=1
     `;
     const params = {};
 
     if (department && department !== 'ALL') {
-      studentQuery += ` AND p.department = :department`;
+      studentQuery += ` AND s.department = :department`;
       params.department = department;
     }
 
     if (mentor_id && mentor_id !== 'ALL') {
       if (mentor_id === 'UNASSIGNED') {
-        studentQuery += ` AND (p.assigned_mentor_id IS NULL OR p.assigned_mentor_id = '')`;
+        studentQuery += ` AND (s.mentor_roll_number IS NULL OR s.mentor_roll_number = '')`;
       } else {
-        studentQuery += ` AND p.assigned_mentor_id = :mentor_id`;
+        studentQuery += ` AND s.mentor_roll_number = :mentor_id`;
         params.mentor_id = mentor_id;
       }
     }
 
     // Year / Batch filtering
     if (year === '2' || year === '2nd' || batch === '2029') {
-      studentQuery += ` AND ((LOWER(TRIM(p.id_number)) LIKE '25%' OR p.register_number LIKE '312325%' OR p.id_number LIKE '312325%') AND NOT (LOWER(TRIM(p.id_number)) LIKE '24%'))`;
+      studentQuery += ` AND (s.year_of_study = 2 OR s.batch = '2029' OR LOWER(TRIM(s.roll_number)) LIKE '25%' OR s.register_number LIKE '312325%')`;
     } else if (year === '3' || year === '3rd' || batch === '2028') {
-      studentQuery += ` AND ((LOWER(TRIM(p.id_number)) LIKE '24%' OR p.register_number LIKE '312324%' OR p.id_number LIKE '312324%') AND NOT (LOWER(TRIM(p.id_number)) LIKE '25%'))`;
+      studentQuery += ` AND (s.year_of_study = 3 OR s.batch = '2028' OR LOWER(TRIM(s.roll_number)) LIKE '24%' OR s.register_number LIKE '312324%')`;
     }
 
-    studentQuery += ` ORDER BY p.id_number ASC`;
+    studentQuery += ` ORDER BY s.roll_number ASC`;
 
     const allStudents = await sequelize.query(studentQuery, {
       replacements: params,
@@ -667,11 +669,11 @@ router.get('/student-scores', async (req, res) => {
     }
 
     // 2. Fetch all scores for these students
-    const studentIds = allStudents.map(s => s.id_number);
+    const studentIds = allStudents.map(s => s.roll_number);
     const allScores = await sequelize.query(`
-      SELECT register_number, parameter, marks
+      SELECT roll_number as register_number, parameter_id as parameter, marks
       FROM scores
-      WHERE register_number IN (:studentIds)
+      WHERE roll_number IN (:studentIds)
     `, {
       replacements: { studentIds },
       type: sequelize.QueryTypes.SELECT
@@ -698,11 +700,11 @@ router.get('/student-scores', async (req, res) => {
     };
 
     let processed = allStudents.map(st => {
-      const sMap = scoreMap[st.id_number] || {};
+      const sMap = scoreMap[st.roll_number] || {};
       const totalScore = Object.values(sMap).reduce((acc, v) => acc + (parseFloat(v) || 0), 0);
       const roundedTotal = Math.round(totalScore * 10) / 10;
       const readinessTier = calculateTier(roundedTotal);
-      const yearInfo = getStudentYearAndBatch(st.id_number, st.register_number);
+      const yearInfo = getStudentYearAndBatch(st.roll_number, st.register_number);
 
       stats.total_score_sum += roundedTotal;
       if (yearInfo.year === 2) stats.second_year_count++;
@@ -717,13 +719,13 @@ router.get('/student-scores', async (req, res) => {
       if (!st.assigned_mentor_id) stats.unassigned++;
 
       return {
-        id_number: st.id_number,
-        roll_number: st.id_number,
+        id_number: st.roll_number,
+        roll_number: st.roll_number,
         register_number: st.register_number,
         name: st.name,
         email: st.email,
         department: st.department,
-        college: st.college,
+        college: st.college || "St. Joseph's College of Engineering",
         year: yearInfo.year,
         batch: yearInfo.batch,
         batch_label: yearInfo.label,
@@ -756,7 +758,7 @@ router.get('/student-scores', async (req, res) => {
     if (search) {
       const q = search.toLowerCase();
       processed = processed.filter(
-        s => s.name.toLowerCase().includes(q) || s.id_number.toLowerCase().includes(q) || s.register_number.toLowerCase().includes(q)
+        s => s.name.toLowerCase().includes(q) || s.roll_number.toLowerCase().includes(q) || (s.register_number && s.register_number.toLowerCase().includes(q))
       );
     }
 
@@ -802,35 +804,22 @@ router.get('/student-scores', async (req, res) => {
 router.get('/mentors', async (req, res) => {
   try {
     const { year } = req.query;
-    let yearFilter = '';
-    const replacements = {};
-
-    if (year === '2' || year === '2nd') {
-      yearFilter = `WHERE (m.mentor_year = 2 OR m.id_number LIKE '%2ND%')`;
-    } else if (year === '3' || year === '3rd') {
-      yearFilter = `WHERE (m.mentor_year = 3 OR m.id_number LIKE '%3RD%')`;
-    } else {
-      // Exclude legacy duplicate mentors with 0 mentees if year-specific exist
-      yearFilter = `WHERE (m.mentor_year IS NOT NULL OR m.id_number LIKE '%2ND%' OR m.id_number LIKE '%3RD%')`;
-    }
 
     const mentors = await sequelize.query(`
       SELECT 
-        m.id_number,
+        m.roll_number as id_number,
+        m.roll_number,
         m.name,
         m.email,
         m.department,
-        m.mentor_year,
-        COUNT(s.id_number) as assigned_count,
-        COUNT(CASE WHEN (LOWER(TRIM(s.id_number)) LIKE '25%' OR s.register_number LIKE '312325%') AND NOT (LOWER(TRIM(s.id_number)) LIKE '24%') THEN 1 END) as second_year_count,
-        COUNT(CASE WHEN (LOWER(TRIM(s.id_number)) LIKE '24%' OR s.register_number LIKE '312324%') AND NOT (LOWER(TRIM(s.id_number)) LIKE '25%') THEN 1 END) as third_year_count
-      FROM profiles m
-      LEFT JOIN profiles s ON s.assigned_mentor_id = m.id_number AND s.role = 'student'
-      ${yearFilter} AND m.role = 'mentor'
-      GROUP BY m.id_number, m.name, m.email, m.department, m.mentor_year
-      ORDER BY m.mentor_year ASC, m.department ASC, m.name ASC
+        COUNT(s.roll_number) as assigned_count,
+        COUNT(CASE WHEN s.year_of_study = 2 OR s.batch = '2029' OR LOWER(TRIM(s.roll_number)) LIKE '25%' THEN 1 END) as second_year_count,
+        COUNT(CASE WHEN s.year_of_study = 3 OR s.batch = '2028' OR LOWER(TRIM(s.roll_number)) LIKE '24%' THEN 1 END) as third_year_count
+      FROM mentors m
+      LEFT JOIN students s ON s.mentor_roll_number = m.roll_number
+      GROUP BY m.roll_number, m.name, m.email, m.department
+      ORDER BY m.department ASC, m.name ASC
     `, {
-      replacements,
       type: sequelize.QueryTypes.SELECT
     });
 
@@ -839,7 +828,7 @@ router.get('/mentors', async (req, res) => {
       year_filter: year || 'ALL',
       mentors: mentors.map(m => ({
         ...m,
-        mentor_year: m.mentor_year || (m.id_number.includes('2ND') ? 2 : 3),
+        mentor_year: year === '2' ? 2 : 3,
         assigned_count: parseInt(m.assigned_count) || 0,
         second_year_count: parseInt(m.second_year_count) || 0,
         third_year_count: parseInt(m.third_year_count) || 0

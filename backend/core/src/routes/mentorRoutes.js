@@ -68,23 +68,23 @@ function getReadinessTier(totalScore) {
  */
 router.get('/overview', async (req, res) => {
   try {
-    const mentorId = req.user.id_number;
+    const mentorId = req.user.roll_number || req.user.id_number;
     const mentorDept = req.user.department;
 
     // Get assigned students
     const students = await sequelize.query(`
       SELECT 
-        p.id_number,
-        p.register_number,
-        p.name,
-        p.department,
-        p.email,
-        COALESCE(SUM(s.marks), 0) as total_score
-      FROM profiles p
-      LEFT JOIN scores s ON p.id_number = s.register_number
-      WHERE p.role = 'student' 
-        AND (p.assigned_mentor_id = :mentorId OR (p.assigned_mentor_id IS NULL AND p.department = :mentorDept))
-      GROUP BY p.id_number, p.register_number, p.name, p.department, p.email
+        s.roll_number as id_number,
+        s.roll_number,
+        s.register_number,
+        s.name,
+        s.department,
+        s.email,
+        COALESCE(SUM(sc.marks), 0) as total_score
+      FROM students s
+      LEFT JOIN scores sc ON s.roll_number = sc.roll_number
+      WHERE (s.mentor_roll_number = :mentorId OR (s.mentor_roll_number IS NULL AND s.department = :mentorDept))
+      GROUP BY s.roll_number, s.register_number, s.name, s.department, s.email
       ORDER BY total_score DESC
     `, {
       replacements: { mentorId, mentorDept },
@@ -110,7 +110,8 @@ router.get('/overview', async (req, res) => {
     res.json({
       success: true,
       mentor: {
-        id_number: req.user.id_number,
+        id_number: mentorId,
+        roll_number: mentorId,
         name: req.user.name,
         department: req.user.department
       },
@@ -132,24 +133,24 @@ router.get('/overview', async (req, res) => {
  */
 router.get('/my-students', async (req, res) => {
   try {
-    const mentorId = req.user.id_number;
+    const mentorId = req.user.roll_number || req.user.id_number;
     const mentorDept = req.user.department;
     const { search, tier } = req.query;
 
     // 1. Fetch assigned students
     const students = await sequelize.query(`
       SELECT 
-        p.id_number,
-        p.register_number,
-        p.name,
-        p.email,
-        p.department,
-        p.college,
-        p.assigned_mentor_id
-      FROM profiles p
-      WHERE p.role = 'student'
-        AND (p.assigned_mentor_id = :mentorId OR (p.assigned_mentor_id IS NULL AND p.department = :mentorDept))
-      ORDER BY p.id_number ASC
+        s.roll_number as id_number,
+        s.roll_number,
+        s.register_number,
+        s.name,
+        s.email,
+        s.department,
+        s.batch,
+        s.mentor_roll_number as assigned_mentor_id
+      FROM students s
+      WHERE (s.mentor_roll_number = :mentorId OR (s.mentor_roll_number IS NULL AND s.department = :mentorDept))
+      ORDER BY s.roll_number ASC
     `, {
       replacements: { mentorId, mentorDept },
       type: sequelize.QueryTypes.SELECT
@@ -163,16 +164,16 @@ router.get('/my-students', async (req, res) => {
       });
     }
 
-    const studentIds = students.map(s => s.id_number);
+    const studentIds = students.map(s => s.roll_number);
 
     // 2. Fetch all scores for these students
     const scores = await sequelize.query(`
       SELECT 
-        register_number,
-        parameter,
+        roll_number as register_number,
+        parameter_id as parameter,
         marks
       FROM scores
-      WHERE register_number IN (:studentIds)
+      WHERE roll_number IN (:studentIds)
     `, {
       replacements: { studentIds },
       type: sequelize.QueryTypes.SELECT
@@ -189,19 +190,19 @@ router.get('/my-students', async (req, res) => {
 
     // 4. Assemble student cards
     let formattedStudents = students.map(st => {
-      const sMap = scoresMap[st.id_number] || {};
+      const sMap = scoresMap[st.roll_number] || {};
       const totalScore = Object.values(sMap).reduce((acc, v) => acc + (parseFloat(v) || 0), 0);
       const roundedTotal = Math.round(totalScore * 10) / 10;
       const readiness = getReadinessTier(roundedTotal);
 
       return {
-        id_number: st.id_number,
-        roll_number: st.id_number,
+        id_number: st.roll_number,
+        roll_number: st.roll_number,
         register_number: st.register_number,
         name: st.name,
         email: st.email,
         department: st.department,
-        college: st.college,
+        college: "St. Joseph's College of Engineering",
         scores: {
           hundred_days: sMap.hundred_days || 0,
           language: sMap.language || 0,
@@ -227,7 +228,7 @@ router.get('/my-students', async (req, res) => {
     if (search) {
       const q = search.toLowerCase();
       formattedStudents = formattedStudents.filter(
-        s => s.name.toLowerCase().includes(q) || s.id_number.toLowerCase().includes(q) || s.register_number.toLowerCase().includes(q)
+        s => s.name.toLowerCase().includes(q) || s.roll_number.toLowerCase().includes(q) || (s.register_number && s.register_number.toLowerCase().includes(q))
       );
     }
 
@@ -255,9 +256,9 @@ router.get('/student-detail/:studentId', async (req, res) => {
     const { studentId } = req.params;
 
     const [profile] = await sequelize.query(`
-      SELECT id_number, register_number, name, email, department, college, assigned_mentor_id
-      FROM profiles
-      WHERE id_number = :studentId AND role = 'student'
+      SELECT roll_number as id_number, roll_number, register_number, name, email, department, mentor_roll_number as assigned_mentor_id
+      FROM students
+      WHERE LOWER(TRIM(roll_number)) = LOWER(TRIM(:studentId))
     `, {
       replacements: { studentId },
       type: sequelize.QueryTypes.SELECT
@@ -269,10 +270,10 @@ router.get('/student-detail/:studentId', async (req, res) => {
 
     // Get scores
     const scores = await sequelize.query(`
-      SELECT s.parameter, p.name as parameter_name, s.marks, p.max_marks, s.semester, s.rule_version, s.calculated_at
+      SELECT s.parameter_id as parameter, p.name as parameter_name, s.marks, p.max_marks, s.semester, s.calculated_at
       FROM scores s
-      LEFT JOIN parameters p ON s.parameter = p.id
-      WHERE s.register_number = :studentId
+      LEFT JOIN parameters p ON s.parameter_id = p.id
+      WHERE LOWER(TRIM(s.roll_number)) = LOWER(TRIM(:studentId))
     `, {
       replacements: { studentId },
       type: sequelize.QueryTypes.SELECT

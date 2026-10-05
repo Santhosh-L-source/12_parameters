@@ -50,9 +50,9 @@ router.get('/dashboard', async (req, res) => {
     const marksSummary = await sequelize.query(
       `SELECT
         COUNT(*) as completed_parameters,
-        SUM(marks) as total_marks
+        COALESCE(SUM(marks), 0) as total_marks
       FROM scores
-      WHERE register_number = :rollNumber`,
+      WHERE roll_number = :rollNumber`,
       {
         replacements: { rollNumber: student.roll_number },
         type: sequelize.QueryTypes.SELECT
@@ -61,7 +61,7 @@ router.get('/dashboard', async (req, res) => {
 
     // Get total possible marks from parameters table
     const maxMarks = await sequelize.query(
-      `SELECT SUM(max_marks) as max_possible FROM parameters`,
+      `SELECT COALESCE(SUM(max_marks), 250) as max_possible FROM parameters`,
       { type: sequelize.QueryTypes.SELECT }
     );
 
@@ -77,9 +77,9 @@ router.get('/dashboard', async (req, res) => {
       },
       marks_summary: {
         total_parameters: 12,
-        completed_parameters: parseInt(marksSummary[0].completed_parameters || 0),
-        total_marks: parseFloat(marksSummary[0].total_marks || 0),
-        max_possible: parseInt(maxMarks[0].max_possible || 250)
+        completed_parameters: parseInt(marksSummary[0]?.completed_parameters || 0),
+        total_marks: parseFloat(marksSummary[0]?.total_marks || 0),
+        max_possible: parseInt(maxMarks[0]?.max_possible || 250)
       }
     });
 
@@ -96,19 +96,6 @@ router.get('/dashboard', async (req, res) => {
  * GET /api/student/profile
  *
  * Get student profile details
- *
- * Response:
- * {
- *   "success": true,
- *   "student": {
- *     "roll_number": "24CS360",
- *     "name": "AADHIRAMAN R",
- *     "register_number": "312324104001",
- *     "email": "aadhi012007@gmail.com",
- *     "department": "CSE",
- *     "college": "St. JOSEPH'S ENGINEERING"
- *   }
- * }
  */
 router.get('/profile', async (req, res) => {
   try {
@@ -133,28 +120,54 @@ router.get('/profile', async (req, res) => {
 });
 
 /**
+ * GET /api/student/scores
+ *
+ * Get full 12-parameter score breakdown for student
+ */
+router.get('/scores', async (req, res) => {
+  try {
+    const rollNumber = req.user.roll_number;
+
+    const scores = await sequelize.query(
+      `SELECT
+        s.parameter_id as parameter,
+        p.name as parameter_name,
+        s.marks,
+        p.max_marks,
+        s.semester,
+        s.provisional,
+        s.calculated_at
+      FROM scores s
+      LEFT JOIN parameters p ON s.parameter_id = p.id
+      WHERE s.roll_number = :rollNumber
+      ORDER BY s.calculated_at DESC`,
+      {
+        replacements: { rollNumber },
+        type: sequelize.QueryTypes.SELECT
+      }
+    );
+
+    res.json({
+      success: true,
+      student: {
+        roll_number: req.user.roll_number,
+        name: req.user.name
+      },
+      scores: scores || []
+    });
+  } catch (error) {
+    console.error('[SCORES] Error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to load scores'
+    });
+  }
+});
+
+/**
  * GET /api/student/marks
  *
  * Get all marks for the logged-in student
- *
- * Response:
- * {
- *   "success": true,
- *   "student": {
- *     "roll_number": "24CS360",
- *     "name": "AADHIRAMAN R"
- *   },
- *   "marks": [
- *     {
- *       "parameter": "monthly_coding",
- *       "parameter_name": "Monthly Coding Assessment",
- *       "marks": 42.66,
- *       "max_marks": 20,
- *       "semester": 5,
- *       "calculated_at": "2026-09-28T..."
- *     }
- *   ]
- * }
  */
 router.get('/marks', async (req, res) => {
   try {
@@ -163,7 +176,7 @@ router.get('/marks', async (req, res) => {
     // Get all marks with parameter details
     const marks = await sequelize.query(
       `SELECT
-        s.parameter,
+        s.parameter_id as parameter,
         p.name as parameter_name,
         s.marks,
         p.max_marks,
@@ -171,8 +184,8 @@ router.get('/marks', async (req, res) => {
         s.provisional,
         s.calculated_at
       FROM scores s
-      LEFT JOIN parameters p ON s.parameter = p.id
-      WHERE s.register_number = :rollNumber
+      LEFT JOIN parameters p ON s.parameter_id = p.id
+      WHERE s.roll_number = :rollNumber
       ORDER BY s.calculated_at DESC`,
       {
         replacements: { rollNumber },
@@ -202,24 +215,6 @@ router.get('/marks', async (req, res) => {
  * GET /api/student/marks/:parameter
  *
  * Get marks for a specific parameter
- *
- * Example: GET /api/student/marks/monthly_coding
- *
- * Response:
- * {
- *   "success": true,
- *   "student": {
- *     "roll_number": "24CS360",
- *     "name": "AADHIRAMAN R"
- *   },
- *   "parameter": {
- *     "id": "monthly_coding",
- *     "name": "Monthly Coding Assessment",
- *     "max_marks": 20,
- *     "marks": 42.66,
- *     "semester": 5
- *   }
- * }
  */
 router.get('/marks/:parameter', async (req, res) => {
   try {
@@ -228,7 +223,7 @@ router.get('/marks/:parameter', async (req, res) => {
 
     const result = await sequelize.query(
       `SELECT
-        s.parameter,
+        s.parameter_id as parameter,
         p.name as parameter_name,
         s.marks,
         p.max_marks,
@@ -236,9 +231,9 @@ router.get('/marks/:parameter', async (req, res) => {
         s.provisional,
         s.calculated_at
       FROM scores s
-      LEFT JOIN parameters p ON s.parameter = p.id
-      WHERE s.register_number = :rollNumber
-      AND s.parameter = :parameter`,
+      LEFT JOIN parameters p ON s.parameter_id = p.id
+      WHERE s.roll_number = :rollNumber
+      AND s.parameter_id = :parameter`,
       {
         replacements: { rollNumber, parameter },
         type: sequelize.QueryTypes.SELECT

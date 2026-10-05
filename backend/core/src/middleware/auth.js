@@ -42,26 +42,27 @@ async function authenticate(req, res, next) {
 
     const idNumber = decoded.roll_number || decoded.id_number || decoded.id || decoded.userId || '';
 
-    // Fetch latest user data from profiles table (single source of truth)
-    const profiles = await sequelize.query(
-      `SELECT
-        id_number,
-        role,
-        register_number,
-        name,
-        email,
-        department,
-        college,
-        assigned_mentor_id
-      FROM profiles
-      WHERE LOWER(TRIM(id_number)) = LOWER(TRIM(:idNumber))`,
+    // Fetch latest user data from students, mentors, or admins
+    const users = await sequelize.query(
+      `SELECT roll_number, register_number, name, email, department, COALESCE(role, 'student') as role, mentor_roll_number as assigned_mentor_id, 'St. Joseph''s College of Engineering' as college 
+       FROM students
+       WHERE LOWER(TRIM(roll_number)) = LOWER(TRIM(:idNumber))
+       UNION ALL
+       SELECT roll_number, NULL as register_number, name, email, department, COALESCE(role, 'mentor') as role, NULL as assigned_mentor_id, 'St. Joseph''s College of Engineering' as college 
+       FROM mentors
+       WHERE LOWER(TRIM(roll_number)) = LOWER(TRIM(:idNumber))
+       UNION ALL
+       SELECT roll_number, NULL as register_number, name, email, department, COALESCE(role, 'admin') as role, NULL as assigned_mentor_id, 'St. Joseph''s College of Engineering' as college 
+       FROM admins
+       WHERE LOWER(TRIM(roll_number)) = LOWER(TRIM(:idNumber))
+       LIMIT 1`,
       {
         replacements: { idNumber: String(idNumber) },
         type: sequelize.QueryTypes.SELECT
       }
     );
 
-    if (!profiles || profiles.length === 0) {
+    if (!users || users.length === 0) {
       return res.status(401).json({
         success: false,
         error: 'User not found',
@@ -69,17 +70,19 @@ async function authenticate(req, res, next) {
       });
     }
 
+    const user = users[0];
+
     // Attach user data to request object
     req.user = {
-      roll_number: profiles[0].id_number,  // For backwards compatibility
-      id_number: profiles[0].id_number,
-      name: profiles[0].name,
-      register_number: profiles[0].register_number,
-      email: profiles[0].email,
-      department: profiles[0].department,
-      college: profiles[0].college,
-      role: profiles[0].role,
-      assigned_mentor_id: profiles[0].assigned_mentor_id
+      roll_number: user.roll_number,
+      id_number: user.roll_number,
+      name: user.name,
+      register_number: user.register_number,
+      email: user.email,
+      department: user.department,
+      college: user.college,
+      role: user.role,
+      assigned_mentor_id: user.assigned_mentor_id
     };
 
     next();
