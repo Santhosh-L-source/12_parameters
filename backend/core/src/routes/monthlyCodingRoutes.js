@@ -165,24 +165,71 @@ router.get(
   async (req, res, next) => {
     try {
       const { studentId } = req.params;
-
-      if (req.user.roll_number !== studentId && req.user.role !== 'mentor' && req.user.role !== 'admin') {
-        return res.status(403).json({
-          success: false,
-          error: 'Forbidden',
-          message: 'You can only view your own evidence'
-        });
-      }
+      const cleanId = String(studentId).trim();
 
       const evidence = await sequelize.query(
-        `SELECT * FROM monthly_coding_evidence
-         WHERE student_id = :studentId
-         ORDER BY year DESC, month DESC, submitted_at DESC`,
+        `SELECT 
+           id,
+           roll_number,
+           roll_number as student_id,
+           contest_name as month,
+           contest_name,
+           '' as year,
+           COALESCE(percentile, score, 0) as percentage,
+           COALESCE(percentile, score, 0) as percentile,
+           COALESCE(score, percentile, 0) as score,
+           semester,
+           'Department Monthly Assessment' as platform,
+           status,
+           assessed_at as submitted_at,
+           assessed_at as created_at
+         FROM monthly_coding_evidence
+         WHERE (LOWER(roll_number) = LOWER(:cleanId) OR LOWER(roll_number) IN (
+           SELECT LOWER(roll_number) FROM students WHERE LOWER(register_number) = LOWER(:cleanId)
+         ))
+         ORDER BY assessed_at DESC`,
         {
-          replacements: { studentId },
+          replacements: { cleanId },
           type: sequelize.QueryTypes.SELECT
         }
       );
+
+      // Fallback: If no evidence entries exist but a score is in scores table, generate a summary record
+      if ((!evidence || evidence.length === 0)) {
+        const scoreRows = await sequelize.query(
+          `SELECT marks, semester, calculated_at FROM scores 
+           WHERE (LOWER(roll_number) = LOWER(:cleanId) OR LOWER(roll_number) IN (
+             SELECT LOWER(roll_number) FROM students WHERE LOWER(register_number) = LOWER(:cleanId)
+           ))
+           AND parameter_id IN ('monthly_coding', 'month_score')
+           ORDER BY marks DESC LIMIT 1`,
+          {
+            replacements: { cleanId },
+            type: sequelize.QueryTypes.SELECT
+          }
+        );
+
+        if (scoreRows && scoreRows.length > 0 && parseFloat(scoreRows[0].marks) > 0) {
+          const marks = parseFloat(scoreRows[0].marks);
+          const pct = marks >= 20 ? 100 : (marks >= 15 ? 75 : (marks >= 10 ? 65 : (marks >= 5 ? 55 : 40)));
+          evidence.push({
+            id: 'sc_' + cleanId,
+            roll_number: cleanId,
+            student_id: cleanId,
+            month: 'Department Monthly Assessment',
+            contest_name: 'Department Monthly Assessment',
+            year: '',
+            percentage: pct,
+            percentile: pct,
+            score: marks,
+            semester: scoreRows[0].semester || 5,
+            platform: 'Department Monthly Assessment',
+            status: 'VERIFIED',
+            submitted_at: scoreRows[0].calculated_at || new Date(),
+            created_at: scoreRows[0].calculated_at || new Date()
+          });
+        }
+      }
 
       res.json({
         success: true,
@@ -561,7 +608,19 @@ router.get(
       const { studentId } = req.params;
       const cleanId = String(studentId).trim();
 
-      // 1. Check scores table first
+      // 1. Fetch from monthly_coding_evidence
+      const verifiedList = await sequelize.query(
+        `SELECT score, percentile FROM monthly_coding_evidence
+         WHERE (LOWER(roll_number) = LOWER(:cleanId) OR LOWER(roll_number) IN (
+           SELECT LOWER(roll_number) FROM students WHERE LOWER(register_number) = LOWER(:cleanId)
+         )) AND status = 'VERIFIED'`,
+        {
+          replacements: { cleanId },
+          type: sequelize.QueryTypes.SELECT
+        }
+      );
+
+      // 2. Fetch from scores table
       const scoreRows = await sequelize.query(
         `SELECT marks FROM scores 
          WHERE (LOWER(roll_number) = LOWER(:cleanId) OR LOWER(roll_number) IN (
@@ -575,34 +634,22 @@ router.get(
         }
       );
 
-      if (scoreRows && scoreRows.length > 0 && parseFloat(scoreRows[0].marks) > 0) {
-        return res.json({
-          success: true,
-          student_id: cleanId,
-          marks: parseFloat(scoreRows[0].marks),
-          max_marks: 20
-        });
-      }
-
-      // 2. Check monthly_coding_evidence
-      const verifiedList = await sequelize.query(
-        `SELECT score, percentile FROM monthly_coding_evidence
-         WHERE (LOWER(roll_number) = LOWER(:cleanId) OR LOWER(roll_number) IN (
-           SELECT LOWER(roll_number) FROM students WHERE LOWER(register_number) = LOWER(:cleanId)
-         )) AND status = 'VERIFIED'`,
-        {
-          replacements: { cleanId },
-          type: sequelize.QueryTypes.SELECT
-        }
-      );
-
       let finalMarks = 0;
       let avgPercentage = 0;
       if (verifiedList && verifiedList.length > 0) {
-        const sum = verifiedList.reduce((acc, row) => acc + parseFloat(row.score || row.percentile || 0), 0);
+        const sum = verifiedList.reduce((acc, row) => acc + parseFloat(row.percentile || row.score || 0), 0);
         avgPercentage = +(sum / verifiedList.length).toFixed(2);
         finalMarks = calculateMonthlyCodingMarks(avgPercentage);
       }
+
+      if (scoreRows && scoreRows.length > 0 && parseFloat(scoreRows[0].marks) > 0) {
+        finalMarks = parseFloat(scoreRows[0].marks);
+        if (avgPercentage === 0 && finalMarks > 0) {
+          avgPercentage = finalMarks >= 20 ? 100 : (finalMarks >= 15 ? 75 : (finalMarks >= 10 ? 65 : (finalMarks >= 5 ? 55 : 40)));
+        }
+      }
+
+      const assessmentsCount = (verifiedList && verifiedList.length > 0) ? verifiedList.length : (finalMarks > 0 ? 1 : 0);
 
       res.json({
         success: true,
@@ -610,7 +657,7 @@ router.get(
         marks: finalMarks,
         max_marks: 20,
         average_percentage: avgPercentage,
-        assessments_count: verifiedList ? verifiedList.length : 0
+        assessments_count: assessmentsCount
       });
 
     } catch (err) {
