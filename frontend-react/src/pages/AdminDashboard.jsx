@@ -118,6 +118,8 @@ const AdminDashboard = () => {
     }
   };
 
+  const [cohortTotals, setCohortTotals] = useState({ third: 0, second: 0 });
+
   const loadAllMentors = async () => {
     try {
       setMentorsLoading(true);
@@ -128,12 +130,18 @@ const AdminDashboard = () => {
 
       if (res3rd.success) {
         setMentors3rd(res3rd.mentors || []);
+        if (res3rd.totals?.total_3rd_year) {
+          setCohortTotals(prev => ({ ...prev, third: res3rd.totals.total_3rd_year }));
+        }
         if (res3rd.mentors.length > 0 && !assignTargetMentor) {
           setAssignTargetMentor(res3rd.mentors[0].id_number);
         }
       }
       if (res2nd.success) {
         setMentors2nd(res2nd.mentors || []);
+        if (res2nd.totals?.total_2nd_year) {
+          setCohortTotals(prev => ({ ...prev, second: res2nd.totals.total_2nd_year }));
+        }
       }
     } catch (err) {
       console.error('Error loading mentors by year:', err);
@@ -342,8 +350,8 @@ const AdminDashboard = () => {
     { id: 'language', name: 'Foreign Language Certification', max: 15, strategy: 'Max proficiency level achieved (A1=7, A2=12, B1=15)' },
   ];
 
-  const total3rdYearMentees = mentors3rd.reduce((sum, m) => sum + (m.assigned_count || 0), 0);
-  const total2ndYearMentees = mentors2nd.reduce((sum, m) => sum + (m.assigned_count || 0), 0);
+  const total3rdYearMentees = cohortTotals.third || mentors3rd.reduce((sum, m) => sum + (m.assigned_count || 0), 0);
+  const total2ndYearMentees = cohortTotals.second || mentors2nd.reduce((sum, m) => sum + (m.assigned_count || 0), 0);
 
   const currentMentorsList = activeTab === 'cohorts_2nd' ? mentors2nd : mentors3rd;
 

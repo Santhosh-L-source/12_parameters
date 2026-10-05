@@ -706,23 +706,22 @@ function calculateTier(totalScore) {
 /**
  * Helper to determine student year and batch
  */
-function getStudentYearAndBatch(idNumber, registerNumber) {
-  const id = String(idNumber || '').toLowerCase().trim();
-  const reg = String(registerNumber || '').toLowerCase().trim();
-
-  // 1. Check direct prefix of Roll Number (id_number)
-  if (id.startsWith('25')) {
+function getStudentYearAndBatch(idNumber, registerNumber, yearOfStudy, batch) {
+  if (yearOfStudy === 2 || batch === '2029') {
     return { year: 2, batch: '2029', label: '2nd Year (2029 Batch)', shortLabel: '2nd Year (2029)', badgeClass: 'year-2' };
   }
-  if (id.startsWith('24')) {
+  if (yearOfStudy === 3 || batch === '2028') {
     return { year: 3, batch: '2028', label: '3rd Year (2028 Batch)', shortLabel: '3rd Year (2028)', badgeClass: 'year-3' };
   }
 
-  // 2. Check Register Number prefix (e.g. 312325... or 312324...)
-  if (reg.startsWith('312325') || id.startsWith('312325')) {
+  const id = String(idNumber || '').toUpperCase().trim();
+  const reg = String(registerNumber || '').toUpperCase().trim();
+
+  // 1. Check direct prefix of Roll Number (id_number)
+  if (id.startsWith('25') || reg.startsWith('312325') || reg.startsWith('312425')) {
     return { year: 2, batch: '2029', label: '2nd Year (2029 Batch)', shortLabel: '2nd Year (2029)', badgeClass: 'year-2' };
   }
-  if (reg.startsWith('312324') || id.startsWith('312324')) {
+  if (id.startsWith('24') || reg.startsWith('312324') || reg.startsWith('312424')) {
     return { year: 3, batch: '2028', label: '3rd Year (2028 Batch)', shortLabel: '3rd Year (2028)', badgeClass: 'year-3' };
   }
 
@@ -772,10 +771,10 @@ router.get('/student-scores', async (req, res) => {
     }
 
     // Year / Batch filtering
-    if (year === '2' || year === '2nd' || batch === '2029') {
-      studentQuery += ` AND (s.year_of_study = 2 OR s.batch = '2029' OR LOWER(TRIM(s.roll_number)) LIKE '25%' OR s.register_number LIKE '312325%')`;
-    } else if (year === '3' || year === '3rd' || batch === '2028') {
-      studentQuery += ` AND (s.year_of_study = 3 OR s.batch = '2028' OR LOWER(TRIM(s.roll_number)) LIKE '24%' OR s.register_number LIKE '312324%')`;
+    if (year === '2' || year === '2nd' || batch === '2029' || parseInt(year) === 2) {
+      studentQuery += ` AND (s.year_of_study = 2 OR s.batch = '2029' OR UPPER(TRIM(s.roll_number)) LIKE '25%' OR s.register_number LIKE '312425%' OR s.register_number LIKE '312325%')`;
+    } else if (year === '3' || year === '3rd' || batch === '2028' || parseInt(year) === 3) {
+      studentQuery += ` AND (s.year_of_study = 3 OR s.batch = '2028' OR UPPER(TRIM(s.roll_number)) LIKE '24%' OR s.register_number LIKE '312424%' OR s.register_number LIKE '312324%')`;
     }
 
     studentQuery += ` ORDER BY s.roll_number ASC`;
@@ -830,7 +829,7 @@ router.get('/student-scores', async (req, res) => {
       const totalScore = Object.values(sMap).reduce((acc, v) => acc + (parseFloat(v) || 0), 0);
       const roundedTotal = Math.round(totalScore * 10) / 10;
       const readinessTier = calculateTier(roundedTotal);
-      const yearInfo = getStudentYearAndBatch(st.roll_number, st.register_number);
+      const yearInfo = getStudentYearAndBatch(st.roll_number, st.register_number, st.year_of_study, st.batch);
 
       stats.total_score_sum += roundedTotal;
       if (yearInfo.year === 2) stats.second_year_count++;
@@ -939,8 +938,8 @@ router.get('/mentors', async (req, res) => {
         m.email,
         m.department,
         COUNT(s.roll_number) as assigned_count,
-        COUNT(CASE WHEN s.year_of_study = 2 OR s.batch = '2029' OR LOWER(TRIM(s.roll_number)) LIKE '25%' THEN 1 END) as second_year_count,
-        COUNT(CASE WHEN s.year_of_study = 3 OR s.batch = '2028' OR LOWER(TRIM(s.roll_number)) LIKE '24%' THEN 1 END) as third_year_count
+        COUNT(CASE WHEN s.year_of_study = 2 OR s.batch = '2029' OR UPPER(TRIM(s.roll_number)) LIKE '25%' OR s.register_number LIKE '312425%' OR s.register_number LIKE '312325%' THEN 1 END) as second_year_count,
+        COUNT(CASE WHEN s.year_of_study = 3 OR s.batch = '2028' OR UPPER(TRIM(s.roll_number)) LIKE '24%' OR s.register_number LIKE '312424%' OR s.register_number LIKE '312324%' THEN 1 END) as third_year_count
       FROM mentors m
       LEFT JOIN students s ON s.mentor_roll_number = m.roll_number
       GROUP BY m.roll_number, m.name, m.email, m.department
@@ -949,16 +948,43 @@ router.get('/mentors', async (req, res) => {
       type: sequelize.QueryTypes.SELECT
     });
 
+    const [totals] = await sequelize.query(`
+      SELECT 
+        COUNT(CASE WHEN year_of_study = 3 OR batch = '2028' OR UPPER(TRIM(roll_number)) LIKE '24%' OR register_number LIKE '312424%' OR register_number LIKE '312324%' THEN 1 END) as total_3rd_year,
+        COUNT(CASE WHEN year_of_study = 2 OR batch = '2029' OR UPPER(TRIM(roll_number)) LIKE '25%' OR register_number LIKE '312425%' OR register_number LIKE '312325%' THEN 1 END) as total_2nd_year,
+        COUNT(*) as total_students
+      FROM students
+    `, { type: sequelize.QueryTypes.SELECT });
+
+    const total3rdYear = parseInt(totals?.total_3rd_year) || 0;
+    const total2ndYear = parseInt(totals?.total_2nd_year) || 0;
+    const totalStudents = parseInt(totals?.total_students) || 0;
+
     res.json({
       success: true,
       year_filter: year || 'ALL',
-      mentors: mentors.map(m => ({
-        ...m,
-        mentor_year: year === '2' ? 2 : 3,
-        assigned_count: parseInt(m.assigned_count) || 0,
-        second_year_count: parseInt(m.second_year_count) || 0,
-        third_year_count: parseInt(m.third_year_count) || 0
-      }))
+      totals: {
+        total_3rd_year: total3rdYear,
+        total_2nd_year: total2ndYear,
+        total_students: totalStudents
+      },
+      mentors: mentors.map(m => {
+        const secCount = parseInt(m.second_year_count) || 0;
+        const thrdCount = parseInt(m.third_year_count) || 0;
+        const allCount = parseInt(m.assigned_count) || 0;
+        const targetCount = (year === '2' || parseInt(year) === 2) 
+          ? secCount 
+          : ((year === '3' || parseInt(year) === 3) ? thrdCount : allCount);
+
+        return {
+          ...m,
+          mentor_year: year === '2' ? 2 : 3,
+          assigned_count: targetCount,
+          second_year_count: secCount,
+          third_year_count: thrdCount,
+          total_assigned: allCount
+        };
+      })
     });
   } catch (error) {
     console.error('[ADMIN MENTORS] Error:', error.message);
@@ -1025,65 +1051,45 @@ router.post('/auto-assign-departments', async (req, res) => {
   try {
     const targetYear = req.body.year;
 
-    // 1. Process 3rd Year (Batch 2028) if requested or ALL
-    if (!targetYear || targetYear === '3' || targetYear === 3 || targetYear === 'ALL') {
-      const mentors3rd = await sequelize.query(`
-        SELECT roll_number, department, name FROM mentors WHERE roll_number LIKE '%3RD%' OR roll_number LIKE 'M_3%'
-      `, { type: sequelize.QueryTypes.SELECT });
+    const allMentors = await sequelize.query(`
+      SELECT roll_number, department, name FROM mentors WHERE department IS NOT NULL AND department != ''
+    `, { type: sequelize.QueryTypes.SELECT });
 
-      for (const m of mentors3rd) {
-        let deptCondition = `department = :dept`;
-        if (m.department === 'CSE') {
-          deptCondition = `(department = 'CSE' OR department = 'M.Tech CSE')`;
-        } else if (m.department === 'AI & ML') {
-          deptCondition = `(department = 'AI & ML' OR department = 'CSE (AI & ML)')`;
-        }
+    let totalAssigned = 0;
 
-        await sequelize.query(`
-          UPDATE students
-          SET mentor_roll_number = :mentorId,
-              updated_at = NOW()
-          WHERE (year_of_study = 3 OR batch = '2028' OR LOWER(TRIM(roll_number)) LIKE '24%' OR register_number LIKE '312324%')
-            AND NOT (LOWER(TRIM(roll_number)) LIKE '25%' OR register_number LIKE '312325%')
-            AND ${deptCondition}
-            AND (mentor_roll_number IS NULL OR mentor_roll_number = '' OR mentor_roll_number LIKE '%2ND%')
-        `, {
-          replacements: { mentorId: m.roll_number, dept: m.department }
-        });
+    for (const m of allMentors) {
+      let deptCondition = `s.department = :dept`;
+      if (m.department === 'CSE') {
+        deptCondition = `(s.department = 'CSE' OR s.department = 'M.Tech CSE')`;
+      } else if (m.department === 'AI & ML') {
+        deptCondition = `(s.department = 'AI & ML' OR s.department = 'CSE (AI & ML)')`;
+      } else if (m.department === 'AI & DS') {
+        deptCondition = `(s.department = 'AI & DS' OR s.department = 'AIDS')`;
       }
-    }
 
-    // 2. Process 2nd Year (Batch 2029) if requested or ALL
-    if (!targetYear || targetYear === '2' || targetYear === 2 || targetYear === 'ALL') {
-      const mentors2nd = await sequelize.query(`
-        SELECT roll_number, department, name FROM mentors WHERE roll_number LIKE '%2ND%' OR roll_number LIKE 'M_2%'
-      `, { type: sequelize.QueryTypes.SELECT });
-
-      for (const m of mentors2nd) {
-        let deptCondition = `department = :dept`;
-        if (m.department === 'CSE') {
-          deptCondition = `(department = 'CSE' OR department = 'M.Tech CSE')`;
-        } else if (m.department === 'AI & ML') {
-          deptCondition = `(department = 'AI & ML' OR department = 'CSE (AI & ML)')`;
-        }
-
-        await sequelize.query(`
-          UPDATE students
-          SET mentor_roll_number = :mentorId,
-              updated_at = NOW()
-          WHERE (year_of_study = 2 OR batch = '2029' OR LOWER(TRIM(roll_number)) LIKE '25%' OR register_number LIKE '312325%')
-            AND NOT (LOWER(TRIM(roll_number)) LIKE '24%' OR register_number LIKE '312324%')
-            AND ${deptCondition}
-            AND (mentor_roll_number IS NULL OR mentor_roll_number = '' OR mentor_roll_number LIKE '%3RD%')
-        `, {
-          replacements: { mentorId: m.roll_number, dept: m.department }
-        });
+      let yearCondition = '1=1';
+      if (targetYear === 3 || targetYear === '3') {
+        yearCondition = `(s.year_of_study = 3 OR s.batch = '2028' OR UPPER(TRIM(s.roll_number)) LIKE '24%' OR s.register_number LIKE '312424%' OR s.register_number LIKE '312324%')`;
+      } else if (targetYear === 2 || targetYear === '2') {
+        yearCondition = `(s.year_of_study = 2 OR s.batch = '2029' OR UPPER(TRIM(s.roll_number)) LIKE '25%' OR s.register_number LIKE '312425%' OR s.register_number LIKE '312325%')`;
       }
+
+      const [updated] = await sequelize.query(`
+        UPDATE students s
+        SET mentor_roll_number = :mentorId,
+            updated_at = NOW()
+        WHERE ${yearCondition}
+          AND ${deptCondition}
+      `, {
+        replacements: { mentorId: m.roll_number, dept: m.department }
+      });
+
+      totalAssigned += (updated?.length || 0);
     }
 
     res.json({
       success: true,
-      message: `Auto-assigned students to their respective 2nd/3rd year department mentors`
+      message: `Auto-assigned students to their respective department mentors for ${targetYear ? (targetYear === 2 ? '2nd Year (2029 Batch)' : '3rd Year (2028 Batch)') : 'all cohorts'}`
     });
   } catch (error) {
     console.error('[ADMIN AUTO ASSIGN] Error:', error.message);
