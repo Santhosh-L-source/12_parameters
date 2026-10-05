@@ -105,14 +105,14 @@ async function processImportJobInBackground({
 
     console.log(`[JOB ${jobId}] Starting bulk import: ${rows.length} rows, ${allRollsInFile.length} distinct roll numbers`);
 
-    // 1. One bulk lookup for all roll numbers from profiles table
+    // 1. One bulk lookup for all roll numbers from students table
     let matchingProfiles = [];
     if (allRollsInFile.length > 0) {
       matchingProfiles = await sequelize.query(
-        `SELECT id_number, register_number, name, department 
-         FROM profiles 
-         WHERE UPPER(TRIM(id_number)) = ANY(ARRAY[:allRollsInFile]::text[]) 
-            OR UPPER(TRIM(register_number)) = ANY(ARRAY[:allRollsInFile]::text[])`,
+        `SELECT roll_number, register_number, name, department 
+         FROM students 
+         WHERE UPPER(TRIM(roll_number)) = ANY(ARRAY[:allRollsInFile]::text[]) 
+            OR UPPER(TRIM(COALESCE(register_number, ''))) = ANY(ARRAY[:allRollsInFile]::text[])`,
         {
           replacements: { allRollsInFile },
           type: sequelize.QueryTypes.SELECT
@@ -122,18 +122,18 @@ async function processImportJobInBackground({
 
     const profileMap = new Map();
     for (const p of matchingProfiles) {
-      if (p.id_number) profileMap.set(String(p.id_number).trim().toUpperCase(), p);
+      if (p.roll_number) profileMap.set(String(p.roll_number).trim().toUpperCase(), p);
       if (p.register_number) profileMap.set(String(p.register_number).trim().toUpperCase(), p);
     }
 
     // 2. One bulk fetch of existing evidence for all matched students
-    const matchedRolls = Array.from(new Set(matchingProfiles.map(p => p.id_number)));
+    const matchedRolls = Array.from(new Set(matchingProfiles.map(p => p.roll_number)));
     let existingEvidence = [];
     if (matchedRolls.length > 0) {
       existingEvidence = await sequelize.query(
-        `SELECT id, student_id, distinct_key, percentage, status 
+        `SELECT id, roll_number, contest_name, percentile, score, status 
          FROM monthly_coding_evidence 
-         WHERE student_id = ANY(ARRAY[:matchedRolls]::text[])`,
+         WHERE roll_number = ANY(ARRAY[:matchedRolls]::text[])`,
         {
           replacements: { matchedRolls },
           type: sequelize.QueryTypes.SELECT
@@ -141,17 +141,18 @@ async function processImportJobInBackground({
       );
     }
 
-    const evidenceKeyMap = new Map(); // student_id + '_' + distinct_key -> id
-    const studentVerifiedPcts = new Map(); // student_id -> array of { key, pct }
+    const evidenceKeyMap = new Map(); // roll_number + '_' + contest_name -> id
+    const studentVerifiedPcts = new Map(); // roll_number -> array of { key, pct }
 
     for (const ev of existingEvidence) {
-      const sId = String(ev.student_id).trim().toUpperCase();
-      evidenceKeyMap.set(`${sId}_${ev.distinct_key}`, ev.id);
+      const rNo = String(ev.roll_number).trim().toUpperCase();
+      const cName = String(ev.contest_name || '').trim().toUpperCase();
+      evidenceKeyMap.set(`${rNo}_${cName}`, ev.id);
       if (ev.status === 'VERIFIED') {
-        if (!studentVerifiedPcts.has(sId)) {
-          studentVerifiedPcts.set(sId, []);
+        if (!studentVerifiedPcts.has(rNo)) {
+          studentVerifiedPcts.set(rNo, []);
         }
-        studentVerifiedPcts.get(sId).push({ id: ev.id, key: ev.distinct_key, pct: parseFloat(ev.percentage || 0) });
+        studentVerifiedPcts.get(rNo).push({ id: ev.id, key: cName, pct: parseFloat(ev.percentile || ev.score || 0) });
       }
     }
 
@@ -195,51 +196,54 @@ async function processImportJobInBackground({
           row: rowIndex,
           rollNo: cleanRoll,
           name: rawName,
-          error: `Student ${cleanRoll} not found in profiles database`
+          error: `Student ${cleanRoll} not found in students database`
         });
         results.failed++;
         continue;
       }
 
-      const actualRoll = profile.id_number;
+      const actualRoll = profile.roll_number;
       const actualRollKey = actualRoll.toUpperCase();
+      const contestKey = cycleMonth.toUpperCase();
 
       // Aggregate / take the best score if student appears multiple times in same file
-      const existingInBatch = toInsertEvidence.find(e => e.student_id.toUpperCase() === actualRollKey) ||
-                              toUpdateEvidence.find(e => e.student_id.toUpperCase() === actualRollKey);
+      const existingInBatch = toInsertEvidence.find(e => e.roll_number.toUpperCase() === actualRollKey) ||
+                              toUpdateEvidence.find(e => e.roll_number.toUpperCase() === actualRollKey);
 
       if (existingInBatch) {
-        existingInBatch.percentage = Math.max(existingInBatch.percentage, percentage);
+        existingInBatch.percentile = Math.max(existingInBatch.percentile, percentage);
+        existingInBatch.score = existingInBatch.percentile;
       } else {
-        const existingEvidenceId = evidenceKeyMap.get(`${actualRollKey}_${distinct_key}`);
+        const existingEvidenceId = evidenceKeyMap.get(`${actualRollKey}_${contestKey}`);
         if (existingEvidenceId) {
           toUpdateEvidence.push({
             id: existingEvidenceId,
-            student_id: actualRoll,
-            percentage,
+            roll_number: actualRoll,
+            percentile: percentage,
+            score: percentage,
             semester
           });
           results.updated++;
         } else {
           toInsertEvidence.push({
-            student_id: actualRoll,
-            percentage,
-            semester,
-            month: cycleMonth,
-            year: currentYear
+            roll_number: actualRoll,
+            contest_name: cycleMonth,
+            percentile: percentage,
+            score: percentage,
+            semester
           });
           results.inserted++;
         }
       }
 
       // Update in-memory verification list for average calculation
-      const finalScoreForStudent = existingInBatch ? existingInBatch.percentage : percentage;
+      const finalScoreForStudent = existingInBatch ? existingInBatch.percentile : percentage;
       const pcts = studentVerifiedPcts.get(actualRollKey) || [];
-      const existingIdx = pcts.findIndex(p => p.key === distinct_key);
+      const existingIdx = pcts.findIndex(p => p.key === contestKey);
       if (existingIdx >= 0) {
         pcts[existingIdx].pct = finalScoreForStudent;
       } else {
-        pcts.push({ key: distinct_key, pct: finalScoreForStudent });
+        pcts.push({ key: contestKey, pct: finalScoreForStudent });
       }
       studentVerifiedPcts.set(actualRollKey, pcts);
 
@@ -259,36 +263,28 @@ async function processImportJobInBackground({
 
     const CHUNK_SIZE = 500;
 
-    // 4. Batch Inserts with ON CONFLICT & Transaction per Chunk
+    // 4. Batch Inserts into monthly_coding_evidence
     if (toInsertEvidence.length > 0) {
       for (let i = 0; i < toInsertEvidence.length; i += CHUNK_SIZE) {
         const chunk = toInsertEvidence.slice(i, i + CHUNK_SIZE);
         const transaction = await sequelize.transaction();
         try {
           const values = [];
-          const replacements = { uploadedBy, distinct_key };
+          const replacements = {};
 
           chunk.forEach((item, idx) => {
-            values.push(`(:st_${idx}, :sem_${idx}, :mon_${idx}, :yr_${idx}, :pct_${idx}, 'Department Batch Assessment', 'VERIFIED', :uploadedBy, :distinct_key, NOW(), NOW(), NOW(), NOW())`);
-            replacements[`st_${idx}`] = item.student_id;
+            values.push(`(gen_random_uuid(), :st_${idx}, :con_${idx}, :pct_${idx}, :sc_${idx}, :sem_${idx}, 'VERIFIED', NOW())`);
+            replacements[`st_${idx}`] = item.roll_number;
+            replacements[`con_${idx}`] = item.contest_name;
+            replacements[`pct_${idx}`] = item.percentile;
+            replacements[`sc_${idx}`] = item.score;
             replacements[`sem_${idx}`] = item.semester;
-            replacements[`mon_${idx}`] = item.month;
-            replacements[`yr_${idx}`] = item.year;
-            replacements[`pct_${idx}`] = item.percentage;
           });
 
           await sequelize.query(
             `INSERT INTO monthly_coding_evidence 
-             (student_id, semester, month, year, percentage, platform, status, mentor_id, distinct_key, submitted_at, verified_at, created_at, updated_at)
-             VALUES ${values.join(', ')}
-             ON CONFLICT (student_id, distinct_key) 
-             DO UPDATE SET 
-               percentage = EXCLUDED.percentage,
-               semester = EXCLUDED.semester,
-               status = 'VERIFIED',
-               mentor_id = EXCLUDED.mentor_id,
-               verified_at = NOW(),
-               updated_at = NOW()`,
+             (id, roll_number, contest_name, percentile, score, semester, status, assessed_at)
+             VALUES ${values.join(', ')}`,
             { replacements, type: sequelize.QueryTypes.INSERT, transaction }
           );
 
@@ -300,31 +296,31 @@ async function processImportJobInBackground({
       }
     }
 
-    // 5. Batch Updates with Transaction per Chunk
+    // 5. Batch Updates for monthly_coding_evidence
     if (toUpdateEvidence.length > 0) {
       for (let i = 0; i < toUpdateEvidence.length; i += CHUNK_SIZE) {
         const chunk = toUpdateEvidence.slice(i, i + CHUNK_SIZE);
         const transaction = await sequelize.transaction();
         try {
           const values = [];
-          const replacements = { uploadedBy };
+          const replacements = {};
 
           chunk.forEach((item, idx) => {
-            values.push(`(:id_${idx}::int, :pct_${idx}::numeric, :sem_${idx}::int)`);
+            values.push(`(:id_${idx}::uuid, :pct_${idx}::numeric, :sc_${idx}::numeric, :sem_${idx}::int)`);
             replacements[`id_${idx}`] = item.id;
-            replacements[`pct_${idx}`] = item.percentage;
+            replacements[`pct_${idx}`] = item.percentile;
+            replacements[`sc_${idx}`] = item.score;
             replacements[`sem_${idx}`] = item.semester;
           });
 
           await sequelize.query(
             `UPDATE monthly_coding_evidence AS m
-             SET percentage = v.pct,
+             SET percentile = v.pct,
+                 score = v.sc,
                  semester = v.sem,
                  status = 'VERIFIED',
-                 mentor_id = :uploadedBy,
-                 verified_at = NOW(),
-                 updated_at = NOW()
-             FROM (VALUES ${values.join(', ')}) AS v(id, pct, sem)
+                 assessed_at = NOW()
+             FROM (VALUES ${values.join(', ')}) AS v(id, pct, sc, sem)
              WHERE m.id = v.id`,
             { replacements, type: sequelize.QueryTypes.UPDATE, transaction }
           );
@@ -344,25 +340,24 @@ async function processImportJobInBackground({
         const chunk = studentRollList.slice(i, i + CHUNK_SIZE);
         const transaction = await sequelize.transaction();
         try {
-          await sequelize.query(
-            `DELETE FROM scores WHERE register_number IN (:chunk) AND parameter = 'monthly_coding'`,
-            { replacements: { chunk }, type: sequelize.QueryTypes.DELETE, transaction }
-          );
-
           const values = [];
           const replacements = {};
           chunk.forEach((roll, idx) => {
             const sc = studentNewScores.get(roll);
-            values.push(`(:roll_${idx}, 'monthly_coding', :m_${idx}, :sem_${idx}, false, :cyc_${idx}, NOW())`);
+            values.push(`(:roll_${idx}, 'monthly_coding', :m_${idx}, :sem_${idx}, false, NOW())`);
             replacements[`roll_${idx}`] = roll;
             replacements[`m_${idx}`] = sc.finalMarks;
             replacements[`sem_${idx}`] = sc.semester;
-            replacements[`cyc_${idx}`] = sc.cycleMonth;
           });
 
           await sequelize.query(
-            `INSERT INTO scores (register_number, parameter, marks, semester, provisional, rule_version, calculated_at)
-             VALUES ${values.join(', ')}`,
+            `INSERT INTO scores (roll_number, parameter_id, marks, semester, provisional, calculated_at)
+             VALUES ${values.join(', ')}
+             ON CONFLICT (roll_number, parameter_id, semester)
+             DO UPDATE SET 
+               marks = EXCLUDED.marks,
+               provisional = false,
+               calculated_at = NOW()`,
             { replacements, type: sequelize.QueryTypes.INSERT, transaction }
           );
 
@@ -371,6 +366,26 @@ async function processImportJobInBackground({
           await transaction.rollback();
           throw chunkErr;
         }
+      }
+
+      // 7. Update profiles summary scores
+      try {
+        await sequelize.query(
+          `UPDATE profiles p
+           SET total_score = COALESCE((
+                 SELECT SUM(s.marks) FROM scores s WHERE s.roll_number = p.roll_number
+               ), 0),
+               coding_score = COALESCE((
+                 SELECT SUM(s.marks) FROM scores s 
+                 WHERE s.roll_number = p.roll_number 
+                   AND s.parameter_id IN ('coding_problems', 'cp_rating', 'monthly_coding', '100_days_coding')
+               ), 0),
+               updated_at = NOW()
+           WHERE p.roll_number IN (:studentRollList)`,
+          { replacements: { studentRollList } }
+        );
+      } catch (profErr) {
+        console.warn('[JOB] Profile score update warning:', profErr.message);
       }
     }
 
@@ -859,7 +874,7 @@ router.post('/assign-mentor', async (req, res) => {
 
     // Verify mentor exists
     const [mentor] = await sequelize.query(`
-      SELECT id_number, name, department, mentor_year FROM profiles WHERE id_number = :mentor_id AND role = 'mentor'
+      SELECT roll_number, name, department FROM mentors WHERE roll_number = :mentor_id
     `, {
       replacements: { mentor_id },
       type: sequelize.QueryTypes.SELECT
@@ -870,10 +885,10 @@ router.post('/assign-mentor', async (req, res) => {
     }
 
     await sequelize.query(`
-      UPDATE profiles
-      SET assigned_mentor_id = :mentor_id,
+      UPDATE students
+      SET mentor_roll_number = :mentor_id,
           updated_at = NOW()
-      WHERE id_number IN (:student_ids) AND role = 'student'
+      WHERE roll_number IN (:student_ids)
     `, {
       replacements: { mentor_id, student_ids }
     });
@@ -902,7 +917,7 @@ router.post('/auto-assign-departments', async (req, res) => {
     // 1. Process 3rd Year (Batch 2028) if requested or ALL
     if (!targetYear || targetYear === '3' || targetYear === 3 || targetYear === 'ALL') {
       const mentors3rd = await sequelize.query(`
-        SELECT id_number, department, name FROM profiles WHERE role = 'mentor' AND (mentor_year = 3 OR id_number LIKE '%3RD%')
+        SELECT roll_number, department, name FROM mentors WHERE roll_number LIKE '%3RD%' OR roll_number LIKE 'M_3%'
       `, { type: sequelize.QueryTypes.SELECT });
 
       for (const m of mentors3rd) {
@@ -914,15 +929,15 @@ router.post('/auto-assign-departments', async (req, res) => {
         }
 
         await sequelize.query(`
-          UPDATE profiles
-          SET assigned_mentor_id = :mentorId
-          WHERE role = 'student'
-            AND (LOWER(TRIM(id_number)) LIKE '24%' OR register_number LIKE '312324%' OR id_number LIKE '312324%')
-            AND NOT (LOWER(TRIM(id_number)) LIKE '25%' OR register_number LIKE '312325%')
+          UPDATE students
+          SET mentor_roll_number = :mentorId,
+              updated_at = NOW()
+          WHERE (year_of_study = 3 OR batch = '2028' OR LOWER(TRIM(roll_number)) LIKE '24%' OR register_number LIKE '312324%')
+            AND NOT (LOWER(TRIM(roll_number)) LIKE '25%' OR register_number LIKE '312325%')
             AND ${deptCondition}
-            AND (assigned_mentor_id IS NULL OR assigned_mentor_id = '' OR assigned_mentor_id LIKE '%2ND%')
+            AND (mentor_roll_number IS NULL OR mentor_roll_number = '' OR mentor_roll_number LIKE '%2ND%')
         `, {
-          replacements: { mentorId: m.id_number, dept: m.department }
+          replacements: { mentorId: m.roll_number, dept: m.department }
         });
       }
     }
@@ -930,7 +945,7 @@ router.post('/auto-assign-departments', async (req, res) => {
     // 2. Process 2nd Year (Batch 2029) if requested or ALL
     if (!targetYear || targetYear === '2' || targetYear === 2 || targetYear === 'ALL') {
       const mentors2nd = await sequelize.query(`
-        SELECT id_number, department, name FROM profiles WHERE role = 'mentor' AND (mentor_year = 2 OR id_number LIKE '%2ND%')
+        SELECT roll_number, department, name FROM mentors WHERE roll_number LIKE '%2ND%' OR roll_number LIKE 'M_2%'
       `, { type: sequelize.QueryTypes.SELECT });
 
       for (const m of mentors2nd) {
@@ -942,15 +957,15 @@ router.post('/auto-assign-departments', async (req, res) => {
         }
 
         await sequelize.query(`
-          UPDATE profiles
-          SET assigned_mentor_id = :mentorId
-          WHERE role = 'student'
-            AND (LOWER(TRIM(id_number)) LIKE '25%' OR register_number LIKE '312325%' OR id_number LIKE '312325%')
-            AND NOT (LOWER(TRIM(id_number)) LIKE '24%' OR register_number LIKE '312324%')
+          UPDATE students
+          SET mentor_roll_number = :mentorId,
+              updated_at = NOW()
+          WHERE (year_of_study = 2 OR batch = '2029' OR LOWER(TRIM(roll_number)) LIKE '25%' OR register_number LIKE '312325%')
+            AND NOT (LOWER(TRIM(roll_number)) LIKE '24%' OR register_number LIKE '312324%')
             AND ${deptCondition}
-            AND (assigned_mentor_id IS NULL OR assigned_mentor_id = '' OR assigned_mentor_id LIKE '%3RD%')
+            AND (mentor_roll_number IS NULL OR mentor_roll_number = '' OR mentor_roll_number LIKE '%3RD%')
         `, {
-          replacements: { mentorId: m.id_number, dept: m.department }
+          replacements: { mentorId: m.roll_number, dept: m.department }
         });
       }
     }

@@ -81,17 +81,15 @@ async function getPivotedScoresData({ semester, department, search }) {
   // 1. Fetch student profiles
   let profileQuery = `
     SELECT 
-      id_number, 
+      roll_number,
+      roll_number as id_number, 
       register_number, 
       name, 
       department, 
-      CASE 
-        WHEN UPPER(COALESCE(college, '')) LIKE '%TECH%' THEN 'St. Joseph''s Institute of Technology'
-        ELSE 'St. Joseph''s College of Engineering'
-      END AS college,
-      mentor_year
-    FROM profiles
-    WHERE role = 'student'
+      'St. Joseph''s College of Engineering' AS college,
+      batch
+    FROM students
+    WHERE 1=1
   `;
   const replacements = {};
 
@@ -101,18 +99,11 @@ async function getPivotedScoresData({ semester, department, search }) {
   }
 
   if (search) {
-    profileQuery += ` AND (LOWER(name) LIKE :search OR LOWER(id_number) LIKE :search OR LOWER(register_number) LIKE :search)`;
+    profileQuery += ` AND (LOWER(name) LIKE :search OR LOWER(roll_number) LIKE :search OR LOWER(COALESCE(register_number, '')) LIKE :search)`;
     replacements.search = `%${search.toLowerCase()}%`;
   }
 
-  profileQuery += ` ORDER BY 
-    CASE 
-      WHEN UPPER(COALESCE(college, '')) LIKE '%TECH%' THEN 2 
-      ELSE 1 
-    END,
-    department ASC, 
-    LOWER(TRIM(name)) ASC,
-    id_number ASC`;
+  profileQuery += ` ORDER BY department ASC, LOWER(TRIM(name)) ASC, roll_number ASC`;
 
   const students = await sequelize.query(profileQuery, {
     replacements,
@@ -125,7 +116,7 @@ async function getPivotedScoresData({ semester, department, search }) {
 
   // 2. Fetch all scores
   const allScores = await sequelize.query(
-    `SELECT register_number, parameter, marks, semester 
+    `SELECT roll_number as register_number, roll_number, parameter_id as parameter, marks, semester 
      FROM scores`,
     { type: sequelize.QueryTypes.SELECT }
   );

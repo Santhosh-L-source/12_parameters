@@ -239,7 +239,7 @@ router.post(
 
       // Verify student exists
       const studentProfile = await sequelize.query(
-        `SELECT id_number, name, department FROM profiles WHERE UPPER(TRIM(id_number)) = :cleanStudentId`,
+        `SELECT roll_number, name, department FROM students WHERE UPPER(TRIM(roll_number)) = :cleanStudentId OR UPPER(TRIM(COALESCE(register_number, ''))) = :cleanStudentId`,
         {
           replacements: { cleanStudentId },
           type: sequelize.QueryTypes.SELECT
@@ -254,14 +254,15 @@ router.post(
         });
       }
 
-      const distinct_key = `${year}_${month.trim().toUpperCase()}`;
+      const actualRoll = studentProfile[0].roll_number;
+      const contestName = `${month.trim()} ${year}`;
 
-      // Check if already exists for this month/year
+      // Check if already exists for this contest
       const existing = await sequelize.query(
         `SELECT id FROM monthly_coding_evidence
-         WHERE student_id = :cleanStudentId AND distinct_key = :distinct_key`,
+         WHERE roll_number = :actualRoll AND contest_name = :contestName`,
         {
-          replacements: { cleanStudentId, distinct_key },
+          replacements: { actualRoll, contestName },
           type: sequelize.QueryTypes.SELECT
         }
       );
@@ -270,25 +271,16 @@ router.post(
         await sequelize.query(
           `UPDATE monthly_coding_evidence
            SET semester = :semester,
-               percentage = :percentage,
-               problems_solved = :problems_solved,
-               total_problems = :total_problems,
-               platform = :platform,
+               percentile = :percentage,
+               score = :percentage,
                status = 'VERIFIED',
-               mentor_id = :mentorId,
-               verified_at = NOW(),
-               rejection_reason = NULL,
-               updated_at = NOW()
+               assessed_at = NOW()
            WHERE id = :id`,
           {
             replacements: {
               id: existing[0].id,
               semester,
-              percentage,
-              problems_solved,
-              total_problems,
-              platform,
-              mentorId: req.user.roll_number || req.user.id || 'mentor'
+              percentage
             },
             type: sequelize.QueryTypes.UPDATE
           }
@@ -296,21 +288,15 @@ router.post(
       } else {
         await sequelize.query(
           `INSERT INTO monthly_coding_evidence
-           (student_id, semester, month, year, percentage, problems_solved, total_problems, platform, status, mentor_id, distinct_key, submitted_at, verified_at, created_at, updated_at)
+           (id, roll_number, contest_name, percentile, score, semester, status, assessed_at)
            VALUES
-           (:cleanStudentId, :semester, :month, :year, :percentage, :problems_solved, :total_problems, :platform, 'VERIFIED', :mentorId, :distinct_key, NOW(), NOW(), NOW(), NOW())`,
+           (gen_random_uuid(), :actualRoll, :contestName, :percentage, :percentage, :semester, 'VERIFIED', NOW())`,
           {
             replacements: {
-              cleanStudentId,
+              actualRoll,
+              contestName,
               semester,
-              month: month.trim(),
-              year,
-              percentage,
-              problems_solved,
-              total_problems,
-              platform,
-              distinct_key,
-              mentorId: req.user.roll_number || req.user.id || 'mentor'
+              percentage
             },
             type: sequelize.QueryTypes.INSERT
           }
@@ -319,10 +305,10 @@ router.post(
 
       // Recalculate student marks
       const verifiedList = await sequelize.query(
-        `SELECT percentage FROM monthly_coding_evidence
-         WHERE student_id = :cleanStudentId AND status = 'VERIFIED'`,
+        `SELECT percentile, score FROM monthly_coding_evidence
+         WHERE roll_number = :actualRoll AND status = 'VERIFIED'`,
         {
-          replacements: { cleanStudentId },
+          replacements: { actualRoll },
           type: sequelize.QueryTypes.SELECT
         }
       );
@@ -330,25 +316,22 @@ router.post(
       let finalMarks = 0;
       let avgPercentage = 0;
       if (verifiedList.length > 0) {
-        const sum = verifiedList.reduce((acc, row) => acc + parseFloat(row.percentage || 0), 0);
+        const sum = verifiedList.reduce((acc, row) => acc + parseFloat(row.percentile || row.score || 0), 0);
         avgPercentage = +(sum / verifiedList.length).toFixed(2);
         finalMarks = calculateMonthlyCodingMarks(avgPercentage);
       }
 
       await sequelize.query(
-        `DELETE FROM scores WHERE register_number = :cleanStudentId AND parameter = 'monthly_coding'`,
-        {
-          replacements: { cleanStudentId },
-          type: sequelize.QueryTypes.DELETE
-        }
-      );
-
-      await sequelize.query(
-        `INSERT INTO scores (register_number, parameter, marks, semester, provisional, calculated_at)
-         VALUES (:cleanStudentId, 'monthly_coding', :marks, :semester, false, NOW())`,
+        `INSERT INTO scores (roll_number, parameter_id, marks, semester, provisional, calculated_at)
+         VALUES (:actualRoll, 'monthly_coding', :marks, :semester, false, NOW())
+         ON CONFLICT (roll_number, parameter_id, semester)
+         DO UPDATE SET
+           marks = EXCLUDED.marks,
+           provisional = false,
+           calculated_at = NOW()`,
         {
           replacements: {
-            cleanStudentId,
+            actualRoll,
             marks: finalMarks,
             semester
           },
@@ -356,10 +339,22 @@ router.post(
         }
       );
 
+      // Update profiles
+      try {
+        await sequelize.query(
+          `UPDATE profiles p
+           SET total_score = COALESCE((SELECT SUM(s.marks) FROM scores s WHERE s.roll_number = p.roll_number), 0),
+               coding_score = COALESCE((SELECT SUM(s.marks) FROM scores s WHERE s.roll_number = p.roll_number AND s.parameter_id IN ('coding_problems', 'cp_rating', 'monthly_coding', '100_days_coding')), 0),
+               updated_at = NOW()
+           WHERE p.roll_number = :actualRoll`,
+          { replacements: { actualRoll } }
+        );
+      } catch (profErr) {}
+
       return res.json({
         success: true,
-        message: `Assessment recorded for ${studentProfile[0].name} (${cleanStudentId}): ${percentage}% (Overall Average: ${avgPercentage}%, Allotted Marks: ${finalMarks}/20)`,
-        student_id: cleanStudentId,
+        message: `Assessment recorded for ${studentProfile[0].name} (${actualRoll}): ${percentage}% (Overall Average: ${avgPercentage}%, Allotted Marks: ${finalMarks}/20)`,
+        student_id: actualRoll,
         marks: finalMarks,
         average_percentage: avgPercentage
       });
