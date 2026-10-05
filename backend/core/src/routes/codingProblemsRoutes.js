@@ -683,4 +683,99 @@ router.get(
   }
 );
 
+/**
+ * POST /api/coding-problems/remove
+ * or DELETE /api/coding-problems/remove/:platform
+ * Remove a platform profile and recalculate marks
+ */
+const handleRemovePlatform = async (req, res, next) => {
+  try {
+    const studentId = req.user.roll_number || req.user.id_number;
+    const platform = req.body.platform || req.params.platform;
+
+    if (!platform) {
+      return res.status(400).json({
+        success: false,
+        message: 'Platform is required'
+      });
+    }
+
+    const platUpper = platform.trim().toUpperCase();
+
+    // 1. Delete evidence row for this student and platform
+    await sequelize.query(
+      `DELETE FROM coding_problems_evidence
+       WHERE (LOWER(TRIM(student_id)) = LOWER(TRIM(:studentId)))
+         AND UPPER(TRIM(platform)) = :platUpper`,
+      {
+        replacements: { studentId, platUpper },
+        type: sequelize.QueryTypes.DELETE
+      }
+    );
+
+    // 2. Recalculate totals from all remaining VERIFIED platforms
+    const remainingVerified = await sequelize.query(
+      `SELECT total_solved, sql_solved FROM coding_problems_evidence
+       WHERE (LOWER(TRIM(student_id)) = LOWER(TRIM(:studentId)))
+         AND status = 'VERIFIED'`,
+      {
+        replacements: { studentId },
+        type: sequelize.QueryTypes.SELECT
+      }
+    );
+
+    const totalSolved = remainingVerified.reduce((sum, e) => sum + (Number(e.total_solved) || 0), 0);
+    const sqlSolved = remainingVerified.reduce((sum, e) => sum + (Number(e.sql_solved) || 0), 0);
+    const marks = calculateCodingProblemsMarks(totalSolved, sqlSolved);
+
+    // 3. Update parameter row in scores
+    await sequelize.query(
+      `DELETE FROM scores 
+       WHERE (LOWER(TRIM(register_number)) = LOWER(TRIM(:studentId))) 
+         AND parameter = 'coding_problems'`,
+      { replacements: { studentId }, type: sequelize.QueryTypes.DELETE }
+    );
+
+    if (marks > 0) {
+      await sequelize.query(
+        `INSERT INTO scores (register_number, parameter, marks, semester, provisional, calculated_at)
+         VALUES (:studentId, 'coding_problems', :marks, 1, false, NOW())`,
+        { replacements: { studentId, marks }, type: sequelize.QueryTypes.INSERT }
+      );
+    }
+
+    // 4. Also update master row coding_score and recalculate total_score
+    try {
+      await sequelize.query(
+        `UPDATE scores
+         SET coding_score = :marks,
+             total_score = COALESCE(hundred_days_score, 0) + COALESCE(language_score, 0) + 
+                           COALESCE(gate_score, 0) + COALESCE(competition_score, 0) + 
+                           COALESCE(internship_score, 0) + COALESCE(certificate_score, 0) + 
+                           COALESCE(aptitude_score, 0) + :marks + 
+                           COALESCE(cp_score, 0) + COALESCE(oss_score, 0) + 
+                           COALESCE(month_score, 0) + COALESCE(proj_score, 0),
+             calculated_at = NOW(),
+             updated_at = NOW()
+         WHERE LOWER(TRIM(register_number)) = LOWER(TRIM(:studentId)) AND academic_year IS NOT NULL`,
+        { replacements: { studentId, marks }, type: sequelize.QueryTypes.UPDATE }
+      );
+    } catch (_) {}
+
+    res.json({
+      success: true,
+      message: `${platform} profile removed successfully`,
+      marks,
+      total_solved_sum: totalSolved,
+      sql_solved_sum: sqlSolved
+    });
+  } catch (err) {
+    console.error('[CODING_PROBLEMS] Remove error:', err.message);
+    next(err);
+  }
+};
+
+router.post('/remove', authenticate, handleRemovePlatform);
+router.delete('/remove/:platform', authenticate, handleRemovePlatform);
+
 module.exports = router;

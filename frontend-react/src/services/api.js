@@ -125,6 +125,10 @@ export const moduleAPI = {
     method: 'POST',
     body: JSON.stringify(data),
   }),
+  removeCodingProblems: (data) => apiRequest('/api/coding-problems/remove', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
 
   // CP Rating
   getCPRatingEvidence: (studentId) => apiRequest(`/api/cp-rating/student/${studentId}`),

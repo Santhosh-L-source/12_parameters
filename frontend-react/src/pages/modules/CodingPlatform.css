@@ -180,6 +180,32 @@
   color: #0f172a;
 }
 
+.btn-remove-platform {
+  padding: 0.55rem 0.9rem;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+  font-weight: 600;
+  font-size: 0.85rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.btn-remove-platform:hover {
+  background: #fee2e2;
+  border-color: #f87171;
+  color: #b91c1c;
+}
+
+.btn-remove-platform:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .btn-verify-badge {
   display: inline-flex;
   align-items: center;

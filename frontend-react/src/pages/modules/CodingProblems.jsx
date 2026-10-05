@@ -178,6 +178,29 @@ const CodingProblems = () => {
     }
   };
 
+  const handleRemoveProfile = async (platformObj) => {
+    const isConfirmed = window.confirm(`Are you sure you want to remove your ${platformObj.label} profile URL and linked data?`);
+    if (!isConfirmed) return;
+
+    setLoadingPlatform((prev) => ({ ...prev, [platformObj.value]: true }));
+
+    try {
+      const res = await moduleAPI.removeCodingProblems({ platform: platformObj.value });
+      if (res.success) {
+        setUrls((prev) => ({ ...prev, [platformObj.value]: '' }));
+        showAlert(`${platformObj.label} profile removed successfully!`, 'success');
+        await loadData();
+      } else {
+        showAlert(res.message || 'Failed to remove profile', 'error');
+      }
+    } catch (err) {
+      console.error('Error removing platform profile:', err);
+      showAlert('Failed to remove platform profile', 'error');
+    } finally {
+      setLoadingPlatform((prev) => ({ ...prev, [platformObj.value]: false }));
+    }
+  };
+
   const getEvidenceForPlatform = (platformKey) => {
     return evidenceList.find((e) => e.platform === platformKey);
   };
@@ -309,6 +332,18 @@ const CodingProblems = () => {
                     >
                       {isLoading ? 'Saving...' : 'Submit'}
                     </button>
+
+                    {(isSaved || (urls[plat.value] && urls[plat.value].trim().length > 0)) && (
+                      <button
+                        type="button"
+                        className="btn-remove-platform"
+                        title={`Remove ${plat.label} profile`}
+                        disabled={isLoading}
+                        onClick={() => handleRemoveProfile(plat)}
+                      >
+                        🗑️ Remove
+                      </button>
+                    )}
                   </div>
                 </div>
               );
