@@ -18,33 +18,11 @@ router.use(authenticate);
  * GET /api/student/dashboard
  *
  * Get student dashboard data (profile + marks summary)
- *
- * Headers:
- *   Authorization: Bearer <JWT_TOKEN>
- *
- * Response:
- * {
- *   "success": true,
- *   "student": {
- *     "roll_number": "24CS360",
- *     "name": "AADHIRAMAN R",
- *     "register_number": "312324104001",
- *     "email": "aadhi012007@gmail.com",
- *     "department": "CSE",
- *     "college": "St. JOSEPH'S ENGINEERING"
- *   },
- *   "marks_summary": {
- *     "total_parameters": 12,
- *     "completed_parameters": 3,
- *     "total_marks": 75.5,
- *     "max_possible": 250
- *   }
- * }
  */
 router.get('/dashboard', async (req, res) => {
   try {
-    // Student data is already in req.user (from auth middleware)
     const student = req.user;
+    const rollNumber = student.roll_number || student.id_number;
 
     // Get marks summary
     const marksSummary = await sequelize.query(
@@ -52,9 +30,9 @@ router.get('/dashboard', async (req, res) => {
         COUNT(*) as completed_parameters,
         COALESCE(SUM(marks), 0) as total_marks
       FROM scores
-      WHERE roll_number = :rollNumber`,
+      WHERE LOWER(roll_number) = LOWER(:rollNumber)`,
       {
-        replacements: { rollNumber: student.roll_number },
+        replacements: { rollNumber },
         type: sequelize.QueryTypes.SELECT
       }
     );
@@ -73,7 +51,7 @@ router.get('/dashboard', async (req, res) => {
         register_number: student.register_number,
         email: student.email,
         department: student.department,
-        college: student.college
+        college: student.college || "St. Joseph's College of Engineering"
       },
       marks_summary: {
         total_parameters: 12,
@@ -94,7 +72,6 @@ router.get('/dashboard', async (req, res) => {
 
 /**
  * GET /api/student/profile
- *
  * Get student profile details
  */
 router.get('/profile', async (req, res) => {
@@ -107,7 +84,7 @@ router.get('/profile', async (req, res) => {
         register_number: req.user.register_number,
         email: req.user.email,
         department: req.user.department,
-        college: req.user.college
+        college: req.user.college || "St. Joseph's College of Engineering"
       }
     });
   } catch (error) {
@@ -121,12 +98,11 @@ router.get('/profile', async (req, res) => {
 
 /**
  * GET /api/student/scores
- *
  * Get full 12-parameter score breakdown for student
  */
 router.get('/scores', async (req, res) => {
   try {
-    const rollNumber = req.user.roll_number;
+    const rollNumber = req.user.roll_number || req.user.id_number;
 
     const scores = await sequelize.query(
       `SELECT
@@ -139,7 +115,7 @@ router.get('/scores', async (req, res) => {
         s.calculated_at
       FROM scores s
       LEFT JOIN parameters p ON s.parameter_id = p.id
-      WHERE s.roll_number = :rollNumber
+      WHERE LOWER(s.roll_number) = LOWER(:rollNumber)
       ORDER BY s.calculated_at DESC`,
       {
         replacements: { rollNumber },
@@ -166,14 +142,12 @@ router.get('/scores', async (req, res) => {
 
 /**
  * GET /api/student/marks
- *
  * Get all marks for the logged-in student
  */
 router.get('/marks', async (req, res) => {
   try {
-    const rollNumber = req.user.roll_number;
+    const rollNumber = req.user.roll_number || req.user.id_number;
 
-    // Get all marks with parameter details
     const marks = await sequelize.query(
       `SELECT
         s.parameter_id as parameter,
@@ -185,7 +159,7 @@ router.get('/marks', async (req, res) => {
         s.calculated_at
       FROM scores s
       LEFT JOIN parameters p ON s.parameter_id = p.id
-      WHERE s.roll_number = :rollNumber
+      WHERE LOWER(s.roll_number) = LOWER(:rollNumber)
       ORDER BY s.calculated_at DESC`,
       {
         replacements: { rollNumber },
@@ -213,13 +187,12 @@ router.get('/marks', async (req, res) => {
 
 /**
  * GET /api/student/marks/:parameter
- *
  * Get marks for a specific parameter
  */
 router.get('/marks/:parameter', async (req, res) => {
   try {
     const { parameter } = req.params;
-    const rollNumber = req.user.roll_number;
+    const rollNumber = req.user.roll_number || req.user.id_number;
 
     const result = await sequelize.query(
       `SELECT
@@ -232,8 +205,8 @@ router.get('/marks/:parameter', async (req, res) => {
         s.calculated_at
       FROM scores s
       LEFT JOIN parameters p ON s.parameter_id = p.id
-      WHERE s.roll_number = :rollNumber
-      AND s.parameter_id = :parameter`,
+      WHERE LOWER(s.roll_number) = LOWER(:rollNumber)
+      AND LOWER(s.parameter_id) = LOWER(:parameter)`,
       {
         replacements: { rollNumber, parameter },
         type: sequelize.QueryTypes.SELECT
@@ -276,45 +249,24 @@ router.get('/marks/:parameter', async (req, res) => {
 
 /**
  * GET /api/student/evidence
- *
- * Get all evidence submitted by the student
- *
- * Response:
- * {
- *   "success": true,
- *   "student": {
- *     "roll_number": "24CS360",
- *     "name": "AADHIRAMAN R"
- *   },
- *   "evidence": [
- *     {
- *       "id": 1,
- *       "type": "project",
- *       "status": "approved",
- *       "semester": 5,
- *       "submitted_at": "2026-09-28T..."
- *     }
- *   ]
- * }
+ * Get all evidence submitted by the student across all parameters
  */
 router.get('/evidence', async (req, res) => {
   try {
-    const rollNumber = req.user.roll_number;
+    const rollNumber = req.user.roll_number || req.user.id_number;
 
-    // Get all evidence from project_evidence
     const evidence = await sequelize.query(
       `SELECT 
         id,
         'project' as type,
         status,
-        semester,
-        output_name as title,
-        achievement_type as description,
-        COALESCE(submitted_at, created_at) as submitted_at,
+        title,
+        description,
+        submitted_at,
         verified_at as reviewed_at
       FROM project_evidence
-      WHERE student_id = :rollNumber
-      ORDER BY COALESCE(submitted_at, created_at) DESC`,
+      WHERE LOWER(roll_number) = LOWER(:rollNumber)
+      ORDER BY submitted_at DESC`,
       {
         replacements: { rollNumber },
         type: sequelize.QueryTypes.SELECT

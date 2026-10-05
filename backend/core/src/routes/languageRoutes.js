@@ -2,8 +2,8 @@
  * Foreign Language Routes
  *
  * Module: Foreign Language (15 marks)
- * Scoring: A1=7, A2=12, B1=15 (MAX across languages, NOT sum)
- * Verification: Single mentor, manual
+ * Scoring: A1 = 7, A2 = 12, B1 = 15 (MAX across languages, NOT sum)
+ * Verification: Mentor verification & review queue
  */
 
 const express = require('express');
@@ -34,16 +34,55 @@ function validate(req, res, next) {
 }
 
 /**
+ * Helper to resolve canonical roll_number for a student ID or register number
+ */
+async function resolveStudentRoll(idOrReg) {
+  if (!idOrReg) return null;
+  const cleanId = String(idOrReg).trim();
+  const rows = await sequelize.query(
+    `SELECT roll_number, register_number, name, department 
+     FROM students 
+     WHERE LOWER(roll_number) = LOWER(:cleanId) 
+        OR (register_number IS NOT NULL AND LOWER(register_number) = LOWER(:cleanId))
+     LIMIT 1`,
+    {
+      replacements: { cleanId },
+      type: sequelize.QueryTypes.SELECT
+    }
+  );
+  if (rows && rows.length > 0) {
+    return rows[0].roll_number;
+  }
+  return cleanId;
+}
+
+/**
+ * Helper to update profile readiness scores after marks change
+ */
+async function updateStudentProfileScore(rollNumber) {
+  try {
+    await sequelize.query(
+      `UPDATE profiles
+       SET total_score = (
+         SELECT COALESCE(SUM(marks), 0) 
+         FROM scores 
+         WHERE LOWER(roll_number) = LOWER(:rollNumber)
+       ),
+       updated_at = NOW()
+       WHERE LOWER(roll_number) = LOWER(:rollNumber)`,
+      {
+        replacements: { rollNumber },
+        type: sequelize.QueryTypes.UPDATE
+      }
+    );
+  } catch (err) {
+    console.warn('[LANGUAGE] Failed to update profile total_score:', err.message);
+  }
+}
+
+/**
  * POST /api/language/submit
  * Submit foreign language evidence
- *
- * Body:
- * {
- *   "language": "French",
- *   "proficiency_level": "B1",
- *   "certification_name": "DELF B1",
- *   "certificate_url": "https://..."
- * }
  */
 router.post(
   '/submit',
@@ -53,17 +92,17 @@ router.post(
       .notEmpty()
       .withMessage('language is required')
       .custom((value) => {
-        if (value.toLowerCase().trim() === 'english') {
+        if (value && value.toLowerCase().trim() === 'english') {
           throw new Error('English is not accepted as a foreign language');
         }
         return true;
       }),
     body('proficiency_level')
-      .isIn(PROFICIENCY_LEVELS)
-      .withMessage(`proficiency_level must be one of: ${PROFICIENCY_LEVELS.join(', ')}`),
-    body('certification_name')
-      .optional({ checkFalsy: true })
-      .isString(),
+      .optional()
+      .isIn(PROFICIENCY_LEVELS),
+    body('certification_level')
+      .optional()
+      .isIn(PROFICIENCY_LEVELS),
     body('certificate_url')
       .optional({ checkFalsy: true })
       .isString(),
@@ -71,18 +110,29 @@ router.post(
   validate,
   async (req, res, next) => {
     try {
-      const studentId = req.user.roll_number;
-      const { language, proficiency_level, certification_name, certificate_url } = req.body;
+      const studentRoll = req.user.roll_number || req.user.id_number;
+      const language = (req.body.language || '').trim();
+      const level = req.body.certification_level || req.body.proficiency_level || 'A1';
+      const certificateUrl = req.body.certificate_url || req.body.certificateUrl || null;
 
-      // Create distinct_key: language + proficiency_level
-      const distinct_key = `${language.trim()}_${proficiency_level}`;
+      if (!PROFICIENCY_LEVELS.includes(level)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid level',
+          message: `Level must be one of: ${PROFICIENCY_LEVELS.join(', ')}`
+        });
+      }
 
-      // Check for duplicate
+      const canonicalRoll = await resolveStudentRoll(studentRoll);
+      const distinctKey = `${language}_${level}`;
+      const distinctKeyNorm = distinctKey.toLowerCase().trim();
+
       const existing = await sequelize.query(
         `SELECT id FROM language_evidence
-         WHERE student_id = :studentId AND distinct_key_normalized = lower(trim(:distinct_key))`,
+         WHERE LOWER(roll_number) = LOWER(:canonicalRoll) 
+           AND (distinct_key_normalized = :distinctKeyNorm OR distinct_key = :distinctKey)`,
         {
-          replacements: { studentId, distinct_key },
+          replacements: { canonicalRoll, distinctKey, distinctKeyNorm },
           type: sequelize.QueryTypes.SELECT
         }
       );
@@ -91,32 +141,29 @@ router.post(
         return res.status(409).json({
           success: false,
           error: 'Duplicate submission',
-          message: `You have already submitted evidence for ${language} at ${proficiency_level} level`
+          message: `You have already submitted evidence for ${language} at ${level} level`
         });
       }
 
-      // Insert new evidence
-      const result = await sequelize.query(
+      const insertResult = await sequelize.query(
         `INSERT INTO language_evidence
-         (student_id, distinct_key, language, proficiency_level, certification_name, certificate_url,
-          status, verification_source, submitted_at)
-         VALUES (:studentId, :distinct_key, :language, :proficiency_level, :certification_name, :certificate_url,
-                 'PENDING', 'MENTOR_MANUAL', NOW())
-         RETURNING *`,
+         (roll_number, distinct_key, distinct_key_normalized, language, certification_level, certificate_url, status, submitted_at)
+         VALUES (:canonicalRoll, :distinctKey, :distinctKeyNorm, :language, :level, :certificateUrl, 'PENDING', NOW())
+         RETURNING id, roll_number, language, certification_level, status, submitted_at`,
         {
           replacements: {
-            studentId,
-            distinct_key,
-            language: language.trim(),
-            proficiency_level,
-            certification_name: certification_name || null,
-            certificate_url: certificate_url || null
+            canonicalRoll,
+            distinctKey,
+            distinctKeyNorm,
+            language,
+            level,
+            certificateUrl
           },
           type: sequelize.QueryTypes.INSERT
         }
       );
 
-      const evidence = result[0][0];
+      const evidence = insertResult[0][0];
 
       res.status(201).json({
         success: true,
@@ -124,20 +171,12 @@ router.post(
         evidence: {
           id: evidence.id,
           language: evidence.language,
-          proficiency_level: evidence.proficiency_level,
+          proficiency_level: evidence.certification_level,
           status: evidence.status,
           submitted_at: evidence.submitted_at
         }
       });
-
     } catch (err) {
-      if (err.message && err.message.includes('language_evidence_language_check')) {
-        return res.status(400).json({
-          success: false,
-          error: 'Invalid language',
-          message: 'English is not accepted as a foreign language'
-        });
-      }
       console.error('[LANGUAGE] Submit error:', err.message);
       next(err);
     }
@@ -156,9 +195,10 @@ router.get(
   async (req, res, next) => {
     try {
       const { studentId } = req.params;
+      const canonicalRoll = await resolveStudentRoll(studentId);
 
-      // Check if requesting own data or if mentor/admin
-      if (req.user.roll_number !== studentId && req.user.role !== 'mentor' && req.user.role !== 'admin') {
+      const reqRoll = req.user.roll_number || req.user.id_number;
+      if (req.user.role !== 'mentor' && req.user.role !== 'admin' && reqRoll.toLowerCase() !== studentId.toLowerCase() && reqRoll.toLowerCase() !== canonicalRoll.toLowerCase()) {
         return res.status(403).json({
           success: false,
           error: 'Forbidden',
@@ -169,22 +209,19 @@ router.get(
       const evidence = await sequelize.query(
         `SELECT
           id,
-          student_id,
+          roll_number as student_id,
           language,
-          proficiency_level,
-          certification_name,
+          certification_level as proficiency_level,
           certificate_url,
           status,
-          mentor_id,
+          verified_by_mentor_roll as mentor_id,
           verified_at,
-          verification_source,
-          rejection_reason,
           submitted_at
          FROM language_evidence
-         WHERE student_id = :studentId
+         WHERE LOWER(roll_number) = LOWER(:canonicalRoll)
          ORDER BY submitted_at DESC`,
         {
-          replacements: { studentId },
+          replacements: { canonicalRoll },
           type: sequelize.QueryTypes.SELECT
         }
       );
@@ -193,7 +230,6 @@ router.get(
         success: true,
         evidence: evidence || []
       });
-
     } catch (err) {
       console.error('[LANGUAGE] Get evidence error:', err.message);
       next(err);
@@ -210,40 +246,45 @@ router.get(
   authenticate,
   async (req, res, next) => {
     try {
-      // Require mentor or admin role
       if (req.user.role !== 'mentor' && req.user.role !== 'admin') {
         return res.status(403).json({
           success: false,
           error: 'Forbidden',
-          message: 'Only mentors can access this endpoint'
+          message: 'Only mentors and administrators can access pending queue'
         });
       }
 
-      // Scope to mentor's department (admins see all)
+      const mentorDept = req.user.department;
+      const mentorRole = req.user.role;
+      const mentorRoll = req.user.roll_number || req.user.id_number;
+
       const evidence = await sequelize.query(
         `SELECT
           e.id,
-          e.student_id,
+          e.roll_number as student_id,
           e.language,
-          e.proficiency_level,
-          e.certification_name,
+          e.certification_level as proficiency_level,
           e.certificate_url,
           e.status,
           e.submitted_at,
-          p.name as student_name,
-          p.department
+          s.name as student_name,
+          s.department,
+          s.register_number
          FROM language_evidence e
-         JOIN profiles p ON e.student_id = p.id_number
+         JOIN students s ON LOWER(e.roll_number) = LOWER(s.roll_number)
          WHERE e.status = 'PENDING'
            AND (
              :mentorRole = 'admin'
-             OR p.department = :mentorDepartment
+             OR :mentorDept = 'ALL'
+             OR s.mentor_roll_number = :mentorRoll
+             OR (s.mentor_roll_number IS NULL AND s.department = :mentorDept)
            )
          ORDER BY e.submitted_at ASC`,
         {
           replacements: {
-            mentorRole: req.user.role,
-            mentorDepartment: req.user.department
+            mentorRole,
+            mentorDept,
+            mentorRoll
           },
           type: sequelize.QueryTypes.SELECT
         }
@@ -254,7 +295,6 @@ router.get(
         evidence: evidence || [],
         count: evidence?.length || 0
       });
-
     } catch (err) {
       console.error('[LANGUAGE] Get pending error:', err.message);
       next(err);
@@ -265,18 +305,12 @@ router.get(
 /**
  * POST /api/language/:id/verify
  * Mentor verifies language evidence
- *
- * Body:
- * {
- *   "action": "VERIFIED" | "REJECTED",
- *   "rejection_reason": "..." (required if REJECTED)
- * }
  */
 router.post(
   '/:id/verify',
   authenticate,
   [
-    param('id').isInt().withMessage('id must be an integer'),
+    param('id').isUUID().withMessage('id must be a valid UUID'),
     body('action')
       .isIn(['VERIFIED', 'REJECTED'])
       .withMessage('action must be VERIFIED or REJECTED'),
@@ -288,15 +322,20 @@ router.post(
   validate,
   async (req, res, next) => {
     try {
-      // TODO: Add role check - only mentors can verify
-      // For now, allowing authenticated users
+      if (req.user.role !== 'mentor' && req.user.role !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          error: 'Forbidden',
+          message: 'Only mentors and administrators can verify evidence'
+        });
+      }
 
       const { id } = req.params;
-      const { action, rejection_reason } = req.body;
+      const { action } = req.body;
+      const mentorRoll = req.user.roll_number || req.user.id_number || 'MENTOR';
 
-      // Get evidence
       const evidence = await sequelize.query(
-        `SELECT student_id, status, proficiency_level FROM language_evidence WHERE id = :id`,
+        `SELECT roll_number, status, certification_level, language FROM language_evidence WHERE id = :id`,
         {
           replacements: { id },
           type: sequelize.QueryTypes.SELECT
@@ -307,78 +346,62 @@ router.post(
         return res.status(404).json({
           success: false,
           error: 'Not found',
-          message: 'Evidence not found'
+          message: 'Evidence record not found'
         });
       }
 
-      if (evidence[0].status !== 'PENDING') {
-        return res.status(400).json({
-          success: false,
-          error: 'Invalid status',
-          message: `Evidence is already ${evidence[0].status}`
-        });
-      }
+      const studentRoll = evidence[0].roll_number;
 
-      // Update status
       await sequelize.query(
         `UPDATE language_evidence
          SET status = :status,
-             mentor_id = :mentorId,
-             verified_at = NOW(),
-             rejection_reason = :rejectionReason
+             verified_by_mentor_roll = :mentorRoll,
+             verified_at = NOW()
          WHERE id = :id`,
         {
           replacements: {
             id,
             status: action,
-            mentorId: null, // TODO: Use actual mentor ID from req.user
-            rejectionReason: action === 'REJECTED' ? rejection_reason : null
+            mentorRoll
           },
           type: sequelize.QueryTypes.UPDATE
         }
       );
 
-      // If verified, recalculate marks (MAX across all languages)
       if (action === 'VERIFIED') {
-        const allEvidence = await sequelize.query(
-          `SELECT proficiency_level
+        // Calculate max marks across all verified non-English languages
+        const allVerified = await sequelize.query(
+          `SELECT certification_level
            FROM language_evidence
-           WHERE student_id = :studentId
+           WHERE LOWER(roll_number) = LOWER(:studentRoll)
              AND status = 'VERIFIED'
-             AND lower(trim(language)) != 'english'`,
+             AND LOWER(TRIM(language)) != 'english'`,
           {
-            replacements: { studentId: evidence[0].student_id },
+            replacements: { studentRoll },
             type: sequelize.QueryTypes.SELECT
           }
         );
 
-        // Calculate MAX marks
         let maxMarks = 0;
-        for (const ev of allEvidence) {
-          maxMarks = Math.max(maxMarks, LEVEL_MARKS[ev.proficiency_level] || 0);
+        for (const ev of allVerified) {
+          maxMarks = Math.max(maxMarks, LEVEL_MARKS[ev.certification_level] || 0);
         }
 
-        // Delete existing score
         await sequelize.query(
-          `DELETE FROM scores WHERE register_number = :studentId AND parameter = 'language'`,
-          {
-            replacements: { studentId: evidence[0].student_id },
-            type: sequelize.QueryTypes.DELETE
-          }
-        );
-
-        // Insert new score
-        await sequelize.query(
-          `INSERT INTO scores (register_number, parameter, marks, semester, provisional, calculated_at)
-           VALUES (:studentId, 'language', :marks, 1, false, NOW())`,
+          `INSERT INTO scores (roll_number, parameter_id, marks, semester, provisional, calculated_at)
+           VALUES (:studentRoll, 'language', :maxMarks, 1, false, NOW())
+           ON CONFLICT (roll_number, parameter_id, semester)
+           DO UPDATE SET marks = EXCLUDED.marks, provisional = false, calculated_at = NOW()`,
           {
             replacements: {
-              studentId: evidence[0].student_id,
-              marks: maxMarks
+              studentRoll,
+              maxMarks
             },
             type: sequelize.QueryTypes.INSERT
           }
         );
+
+        await updateStudentProfileScore(studentRoll);
       }
 
       res.json({
@@ -386,7 +409,6 @@ router.post(
         message: `Evidence ${action.toLowerCase()} successfully`,
         action
       });
-
     } catch (err) {
       console.error('[LANGUAGE] Verify error:', err.message);
       next(err);
@@ -406,18 +428,16 @@ router.get(
   async (req, res, next) => {
     try {
       const { studentId } = req.params;
-      const cleanId = String(studentId).trim();
+      const canonicalRoll = await resolveStudentRoll(studentId);
 
       // 1. Check scores table first
       const scoreRows = await sequelize.query(
         `SELECT marks FROM scores 
-         WHERE (LOWER(roll_number) = LOWER(:cleanId) OR LOWER(roll_number) IN (
-           SELECT LOWER(roll_number) FROM students WHERE LOWER(register_number) = LOWER(:cleanId)
-         ))
-         AND parameter_id IN ('language', 'foreign_language')
+         WHERE LOWER(roll_number) = LOWER(:canonicalRoll)
+           AND parameter_id IN ('language', 'foreign_language')
          ORDER BY marks DESC LIMIT 1`,
         {
-          replacements: { cleanId },
+          replacements: { canonicalRoll },
           type: sequelize.QueryTypes.SELECT
         }
       );
@@ -425,7 +445,7 @@ router.get(
       if (scoreRows && scoreRows.length > 0 && parseFloat(scoreRows[0].marks) > 0) {
         return res.json({
           success: true,
-          student_id: cleanId,
+          student_id: canonicalRoll,
           marks: parseFloat(scoreRows[0].marks),
           max_marks: 15
         });
@@ -433,32 +453,29 @@ router.get(
 
       // 2. Check language_evidence table
       const evidence = await sequelize.query(
-        `SELECT certification_level as proficiency_level
+        `SELECT certification_level
          FROM language_evidence
-         WHERE (LOWER(roll_number) = LOWER(:cleanId) OR LOWER(roll_number) IN (
-           SELECT LOWER(roll_number) FROM students WHERE LOWER(register_number) = LOWER(:cleanId)
-         ))
-         AND status = 'VERIFIED'
-         AND lower(trim(language)) != 'english'`,
+         WHERE LOWER(roll_number) = LOWER(:canonicalRoll)
+           AND status = 'VERIFIED'
+           AND LOWER(TRIM(language)) != 'english'`,
         {
-          replacements: { cleanId },
+          replacements: { canonicalRoll },
           type: sequelize.QueryTypes.SELECT
         }
       );
 
       let maxMarks = 0;
       for (const ev of evidence) {
-        maxMarks = Math.max(maxMarks, LEVEL_MARKS[ev.proficiency_level] || 0);
+        maxMarks = Math.max(maxMarks, LEVEL_MARKS[ev.certification_level] || 0);
       }
 
       res.json({
         success: true,
-        student_id: cleanId,
+        student_id: canonicalRoll,
         marks: maxMarks,
         max_marks: 15,
         languages_count: evidence ? evidence.length : 0
       });
-
     } catch (err) {
       console.error('[LANGUAGE] Calculate marks error:', err.message);
       next(err);

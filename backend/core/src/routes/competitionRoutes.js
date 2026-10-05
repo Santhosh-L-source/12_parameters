@@ -2,7 +2,7 @@
  * Competition Achievement Routes
  *
  * Module: Competition Achievement (20 marks)
- * Scoring: Same event → highest round only, sum distinct events, cap 20
+ * Scoring: Same event -> highest round only, sum distinct events, cap 20
  * Verification: Single mentor, manual
  */
 
@@ -44,6 +44,53 @@ function validate(req, res, next) {
 }
 
 /**
+ * Helper to resolve canonical roll_number for a student ID or register number
+ */
+async function resolveStudentRoll(idOrReg) {
+  if (!idOrReg) return null;
+  const cleanId = String(idOrReg).trim();
+  const rows = await sequelize.query(
+    `SELECT roll_number, register_number, name, department 
+     FROM students 
+     WHERE LOWER(roll_number) = LOWER(:cleanId) 
+        OR (register_number IS NOT NULL AND LOWER(register_number) = LOWER(:cleanId))
+     LIMIT 1`,
+    {
+      replacements: { cleanId },
+      type: sequelize.QueryTypes.SELECT
+    }
+  );
+  if (rows && rows.length > 0) {
+    return rows[0].roll_number;
+  }
+  return cleanId;
+}
+
+/**
+ * Helper to update profile readiness scores after marks change
+ */
+async function updateStudentProfileScore(rollNumber) {
+  try {
+    await sequelize.query(
+      `UPDATE profiles
+       SET total_score = (
+         SELECT COALESCE(SUM(marks), 0) 
+         FROM scores 
+         WHERE LOWER(roll_number) = LOWER(:rollNumber)
+       ),
+       updated_at = NOW()
+       WHERE LOWER(roll_number) = LOWER(:rollNumber)`,
+      {
+        replacements: { rollNumber },
+        type: sequelize.QueryTypes.UPDATE
+      }
+    );
+  } catch (err) {
+    console.warn('[COMPETITION] Failed to update profile total_score:', err.message);
+  }
+}
+
+/**
  * POST /api/competition/submit
  * Submit competition evidence
  */
@@ -51,40 +98,36 @@ router.post(
   '/submit',
   authenticate,
   [
-    body('event_name').notEmpty().withMessage('event_name is required'),
-    body('round_cleared')
-      .isIn(ROUNDS)
-      .withMessage(`round_cleared must be one of: ${ROUNDS.join(', ')}`),
-    body('competition_type').optional({ checkFalsy: true }).isString(),
-    body('organizer').optional({ checkFalsy: true }).isString(),
-    body('event_date').optional({ checkFalsy: true }),
+    body('event_name').optional().isString(),
+    body('competition_name').optional().isString(),
+    body('round_cleared').optional().isString(),
+    body('level').optional().isString(),
+    body('position').optional().isString(),
     body('certificate_url').optional({ checkFalsy: true }).isString(),
-    body('proof_url').optional({ checkFalsy: true }).isString(),
   ],
   validate,
   async (req, res, next) => {
     try {
-      const studentId = req.user.roll_number;
-      const {
-        event_name,
-        round_cleared,
-        competition_type,
-        organizer,
-        event_date,
-        certificate_url,
-        proof_url
-      } = req.body;
+      const studentRoll = req.user.roll_number || req.user.id_number;
+      const eventName = (req.body.competition_name || req.body.event_name || '').trim();
+      const level = req.body.level || req.body.round_cleared || 'VALID_COMPLETION';
+      const position = req.body.position || 'PARTICIPATION';
+      const certificateUrl = req.body.certificate_url || null;
 
-      // distinct_key = event name only (no date)
-      const distinct_key = event_name.trim();
-      const stage_marks = ROUND_MARKS[round_cleared];
+      if (!eventName) {
+        return res.status(400).json({ success: false, error: 'competition_name is required' });
+      }
 
-      // Check for duplicate (same student + same event)
+      const canonicalRoll = await resolveStudentRoll(studentRoll);
+      const distinctKey = eventName;
+      const distinctKeyNorm = distinctKey.toLowerCase().trim();
+
       const existing = await sequelize.query(
-        `SELECT id, round_cleared, stage_marks FROM competition_evidence
-         WHERE student_id = :studentId AND distinct_key_normalized = lower(trim(:distinct_key))`,
+        `SELECT id FROM competition_evidence
+         WHERE LOWER(roll_number) = LOWER(:canonicalRoll) 
+           AND (distinct_key_normalized = :distinctKeyNorm OR distinct_key = :distinctKey)`,
         {
-          replacements: { studentId, distinct_key },
+          replacements: { canonicalRoll, distinctKey, distinctKeyNorm },
           type: sequelize.QueryTypes.SELECT
         }
       );
@@ -93,52 +136,42 @@ router.post(
         return res.status(409).json({
           success: false,
           error: 'Duplicate submission',
-          message: `You have already submitted evidence for "${event_name}". To update to a higher round, contact your mentor.`
+          message: `You have already submitted evidence for "${eventName}". To update, contact your mentor.`
         });
       }
 
-      // Insert new evidence
-      const result = await sequelize.query(
+      const insertResult = await sequelize.query(
         `INSERT INTO competition_evidence
-         (student_id, distinct_key, event_name, round_cleared, stage_marks,
-          competition_type, organizer, event_date, certificate_url, proof_url,
-          status, verification_source, submitted_at)
-         VALUES (:studentId, :distinct_key, :event_name, :round_cleared, :stage_marks,
-                 :competition_type, :organizer, :event_date, :certificate_url, :proof_url,
-                 'PENDING', 'MENTOR_MANUAL', NOW())
-         RETURNING *`,
+         (roll_number, distinct_key, distinct_key_normalized, competition_name, level, position, certificate_url, status, submitted_at)
+         VALUES (:canonicalRoll, :distinctKey, :distinctKeyNorm, :eventName, :level, :position, :certificateUrl, 'PENDING', NOW())
+         RETURNING id, roll_number, competition_name, level, position, status, submitted_at`,
         {
           replacements: {
-            studentId,
-            distinct_key,
-            event_name: event_name.trim(),
-            round_cleared,
-            stage_marks,
-            competition_type: competition_type || null,
-            organizer: organizer || null,
-            event_date: event_date || null,
-            certificate_url: certificate_url || null,
-            proof_url: proof_url || null
+            canonicalRoll,
+            distinctKey,
+            distinctKeyNorm,
+            eventName,
+            level,
+            position,
+            certificateUrl
           },
           type: sequelize.QueryTypes.INSERT
         }
       );
 
-      const evidence = result[0][0];
+      const evidence = insertResult[0][0];
 
       res.status(201).json({
         success: true,
         message: 'Competition evidence submitted successfully',
         evidence: {
           id: evidence.id,
-          event_name: evidence.event_name,
-          round_cleared: evidence.round_cleared,
-          stage_marks: evidence.stage_marks,
+          event_name: evidence.competition_name,
+          round_cleared: evidence.level,
           status: evidence.status,
           submitted_at: evidence.submitted_at
         }
       });
-
     } catch (err) {
       console.error('[COMPETITION] Submit error:', err.message);
       next(err);
@@ -158,8 +191,10 @@ router.get(
   async (req, res, next) => {
     try {
       const { studentId } = req.params;
+      const canonicalRoll = await resolveStudentRoll(studentId);
 
-      if (req.user.roll_number !== studentId && req.user.role !== 'mentor' && req.user.role !== 'admin') {
+      const reqRoll = req.user.roll_number || req.user.id_number;
+      if (req.user.role !== 'mentor' && req.user.role !== 'admin' && reqRoll.toLowerCase() !== studentId.toLowerCase() && reqRoll.toLowerCase() !== canonicalRoll.toLowerCase()) {
         return res.status(403).json({
           success: false,
           error: 'Forbidden',
@@ -168,11 +203,22 @@ router.get(
       }
 
       const evidence = await sequelize.query(
-        `SELECT * FROM competition_evidence
-         WHERE student_id = :studentId
+        `SELECT 
+          id,
+          roll_number as student_id,
+          competition_name as event_name,
+          level as round_cleared,
+          position,
+          certificate_url,
+          status,
+          verified_by_mentor_roll as mentor_id,
+          verified_at,
+          submitted_at
+         FROM competition_evidence
+         WHERE LOWER(roll_number) = LOWER(:canonicalRoll)
          ORDER BY submitted_at DESC`,
         {
-          replacements: { studentId },
+          replacements: { canonicalRoll },
           type: sequelize.QueryTypes.SELECT
         }
       );
@@ -181,7 +227,6 @@ router.get(
         success: true,
         evidence: evidence || []
       });
-
     } catch (err) {
       console.error('[COMPETITION] Get evidence error:', err.message);
       next(err);
@@ -191,7 +236,7 @@ router.get(
 
 /**
  * GET /api/competition/pending
- * Get all pending competition evidence for mentor review (scoped to mentor's department)
+ * Get all pending competition evidence for mentor review
  */
 router.get(
   '/pending',
@@ -202,38 +247,42 @@ router.get(
         return res.status(403).json({
           success: false,
           error: 'Forbidden',
-          message: 'Only mentors can access this endpoint'
+          message: 'Only mentors and administrators can access pending queue'
         });
       }
+
+      const mentorDept = req.user.department;
+      const mentorRole = req.user.role;
+      const mentorRoll = req.user.roll_number || req.user.id_number;
 
       const evidence = await sequelize.query(
         `SELECT
           e.id,
-          e.student_id,
-          e.event_name,
-          e.round_cleared,
-          e.stage_marks,
-          e.competition_type,
-          e.organizer,
-          e.event_date,
+          e.roll_number as student_id,
+          e.competition_name as event_name,
+          e.level as round_cleared,
+          e.position,
           e.certificate_url,
-          e.proof_url,
           e.status,
           e.submitted_at,
-          p.name as student_name,
-          p.department
+          s.name as student_name,
+          s.department,
+          s.register_number
          FROM competition_evidence e
-         JOIN profiles p ON e.student_id = p.id_number
+         JOIN students s ON LOWER(e.roll_number) = LOWER(s.roll_number)
          WHERE e.status = 'PENDING'
            AND (
              :mentorRole = 'admin'
-             OR p.department = :mentorDepartment
+             OR :mentorDept = 'ALL'
+             OR s.mentor_roll_number = :mentorRoll
+             OR (s.mentor_roll_number IS NULL AND s.department = :mentorDept)
            )
          ORDER BY e.submitted_at ASC`,
         {
           replacements: {
-            mentorRole: req.user.role,
-            mentorDepartment: req.user.department
+            mentorRole,
+            mentorDept,
+            mentorRoll
           },
           type: sequelize.QueryTypes.SELECT
         }
@@ -244,7 +293,6 @@ router.get(
         evidence: evidence || [],
         count: evidence?.length || 0
       });
-
     } catch (err) {
       console.error('[COMPETITION] Get pending error:', err.message);
       next(err);
@@ -260,7 +308,7 @@ router.post(
   '/:id/verify',
   authenticate,
   [
-    param('id').isInt().withMessage('id must be an integer'),
+    param('id').isUUID().withMessage('id must be a valid UUID'),
     body('action')
       .isIn(['VERIFIED', 'REJECTED'])
       .withMessage('action must be VERIFIED or REJECTED'),
@@ -272,10 +320,18 @@ router.post(
   validate,
   async (req, res, next) => {
     try {
-      const { id } = req.params;
-      const { action, rejection_reason } = req.body;
+      if (req.user.role !== 'mentor' && req.user.role !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          error: 'Forbidden',
+          message: 'Only mentors and administrators can verify evidence'
+        });
+      }
 
-      // Get evidence
+      const { id } = req.params;
+      const { action } = req.body;
+      const mentorRoll = req.user.roll_number || req.user.id_number || 'MENTOR';
+
       const evidence = await sequelize.query(
         `SELECT * FROM competition_evidence WHERE id = :id`,
         {
@@ -288,79 +344,61 @@ router.post(
         return res.status(404).json({
           success: false,
           error: 'Not found',
-          message: 'Evidence not found'
+          message: 'Evidence record not found'
         });
       }
 
-      if (evidence[0].status !== 'PENDING') {
-        return res.status(400).json({
-          success: false,
-          error: 'Invalid status',
-          message: `Evidence is already ${evidence[0].status}`
-        });
-      }
+      const studentRoll = evidence[0].roll_number;
 
-      // Update status
       await sequelize.query(
         `UPDATE competition_evidence
          SET status = :status,
-             mentor_id = :mentorId,
-             verified_at = NOW(),
-             rejection_reason = :rejectionReason
+             verified_by_mentor_roll = :mentorRoll,
+             verified_at = NOW()
          WHERE id = :id`,
         {
           replacements: {
             id,
             status: action,
-            mentorId: null, // TODO: Use actual mentor ID
-            rejectionReason: action === 'REJECTED' ? rejection_reason : null
+            mentorRoll
           },
           type: sequelize.QueryTypes.UPDATE
         }
       );
 
-      // If verified, recalculate marks
       if (action === 'VERIFIED') {
-        // Get all verified evidence for this student
-        // Group by distinct_key_normalized, take MAX stage_marks per group
-        const result = await sequelize.query(
-          `SELECT
-            distinct_key_normalized,
-            MAX(stage_marks) as max_stage_marks
+        const verifiedEvents = await sequelize.query(
+          `SELECT DISTINCT distinct_key_normalized, level, position
            FROM competition_evidence
-           WHERE student_id = :studentId AND status = 'VERIFIED'
-           GROUP BY distinct_key_normalized`,
+           WHERE LOWER(roll_number) = LOWER(:studentRoll) AND status = 'VERIFIED'`,
           {
-            replacements: { studentId: evidence[0].student_id },
+            replacements: { studentRoll },
             type: sequelize.QueryTypes.SELECT
           }
         );
 
-        // Sum across distinct events, cap at 20
-        const totalMarks = result.reduce((sum, row) => sum + row.max_stage_marks, 0);
+        let totalMarks = 0;
+        for (const ev of verifiedEvents) {
+          const marks = ROUND_MARKS[ev.level] || 5;
+          totalMarks += marks;
+        }
         const finalMarks = Math.min(20, totalMarks);
 
-        // Delete existing score
         await sequelize.query(
-          `DELETE FROM scores WHERE register_number = :studentId AND parameter = 'competition'`,
-          {
-            replacements: { studentId: evidence[0].student_id },
-            type: sequelize.QueryTypes.DELETE
-          }
-        );
-
-        // Insert new score
-        await sequelize.query(
-          `INSERT INTO scores (register_number, parameter, marks, semester, provisional, calculated_at)
-           VALUES (:studentId, 'competition', :marks, 1, false, NOW())`,
+          `INSERT INTO scores (roll_number, parameter_id, marks, semester, provisional, calculated_at)
+           VALUES (:studentRoll, 'competition', :finalMarks, 1, false, NOW())
+           ON CONFLICT (roll_number, parameter_id, semester)
+           DO UPDATE SET marks = EXCLUDED.marks, provisional = false, calculated_at = NOW()`,
           {
             replacements: {
-              studentId: evidence[0].student_id,
-              marks: finalMarks
+              studentRoll,
+              finalMarks
             },
             type: sequelize.QueryTypes.INSERT
           }
         );
+
+        await updateStudentProfileScore(studentRoll);
       }
 
       res.json({
@@ -368,7 +406,6 @@ router.post(
         message: `Evidence ${action.toLowerCase()} successfully`,
         action
       });
-
     } catch (err) {
       console.error('[COMPETITION] Verify error:', err.message);
       next(err);
@@ -379,7 +416,6 @@ router.post(
 /**
  * GET /api/competition/marks/:studentId
  * Calculate marks for a student
- * Logic: Group by event, MAX per event, SUM across events, cap 20
  */
 router.get(
   '/marks/:studentId',
@@ -389,18 +425,16 @@ router.get(
   async (req, res, next) => {
     try {
       const { studentId } = req.params;
-      const cleanId = String(studentId).trim();
+      const canonicalRoll = await resolveStudentRoll(studentId);
 
       // 1. Check scores table first
       const scoreRows = await sequelize.query(
         `SELECT marks FROM scores 
-         WHERE (LOWER(roll_number) = LOWER(:cleanId) OR LOWER(roll_number) IN (
-           SELECT LOWER(roll_number) FROM students WHERE LOWER(register_number) = LOWER(:cleanId)
-         ))
-         AND parameter_id IN ('competition', 'competitions')
+         WHERE LOWER(roll_number) = LOWER(:canonicalRoll)
+           AND parameter_id IN ('competition', 'competitions')
          ORDER BY marks DESC LIMIT 1`,
         {
-          replacements: { cleanId },
+          replacements: { canonicalRoll },
           type: sequelize.QueryTypes.SELECT
         }
       );
@@ -408,7 +442,7 @@ router.get(
       if (scoreRows && scoreRows.length > 0 && parseFloat(scoreRows[0].marks) > 0) {
         return res.json({
           success: true,
-          student_id: cleanId,
+          student_id: canonicalRoll,
           marks: parseFloat(scoreRows[0].marks),
           max_marks: 20
         });
@@ -418,28 +452,28 @@ router.get(
       const result = await sequelize.query(
         `SELECT DISTINCT distinct_key_normalized, level, position
          FROM competition_evidence
-         WHERE (LOWER(roll_number) = LOWER(:cleanId) OR LOWER(roll_number) IN (
-           SELECT LOWER(roll_number) FROM students WHERE LOWER(register_number) = LOWER(:cleanId)
-         )) AND status = 'VERIFIED'`,
+         WHERE LOWER(roll_number) = LOWER(:canonicalRoll) AND status = 'VERIFIED'`,
         {
-          replacements: { cleanId },
+          replacements: { canonicalRoll },
           type: sequelize.QueryTypes.SELECT
         }
       );
 
       let totalMarks = 0;
       if (result && result.length > 0) {
-        totalMarks = Math.min(20, result.length * 5);
+        for (const ev of result) {
+          totalMarks += (ROUND_MARKS[ev.level] || 5);
+        }
+        totalMarks = Math.min(20, totalMarks);
       }
 
       res.json({
         success: true,
-        student_id: cleanId,
+        student_id: canonicalRoll,
         marks: totalMarks,
         max_marks: 20,
         events_count: result ? result.length : 0
       });
-
     } catch (err) {
       console.error('[COMPETITION] Calculate marks error:', err.message);
       next(err);

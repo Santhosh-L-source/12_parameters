@@ -1,7 +1,7 @@
 /**
  * GATE / Placement Exam Routes
  *
- * Module: GATE / Placement Exam (25 marks)
+ * Module: GATE / Placement Exam (15/25 marks)
  * Scoring: Core tiers (3/5/10/15/20/25) computed from fields + optional bonus
  * Verification: Single mentor, manual
  */
@@ -30,6 +30,53 @@ function validate(req, res, next) {
 }
 
 /**
+ * Helper to resolve canonical roll_number for a student ID or register number
+ */
+async function resolveStudentRoll(idOrReg) {
+  if (!idOrReg) return null;
+  const cleanId = String(idOrReg).trim();
+  const rows = await sequelize.query(
+    `SELECT roll_number, register_number, name, department 
+     FROM students 
+     WHERE LOWER(roll_number) = LOWER(:cleanId) 
+        OR (register_number IS NOT NULL AND LOWER(register_number) = LOWER(:cleanId))
+     LIMIT 1`,
+    {
+      replacements: { cleanId },
+      type: sequelize.QueryTypes.SELECT
+    }
+  );
+  if (rows && rows.length > 0) {
+    return rows[0].roll_number;
+  }
+  return cleanId;
+}
+
+/**
+ * Helper to update profile readiness scores after marks change
+ */
+async function updateStudentProfileScore(rollNumber) {
+  try {
+    await sequelize.query(
+      `UPDATE profiles
+       SET total_score = (
+         SELECT COALESCE(SUM(marks), 0) 
+         FROM scores 
+         WHERE LOWER(roll_number) = LOWER(:rollNumber)
+       ),
+       updated_at = NOW()
+       WHERE LOWER(roll_number) = LOWER(:rollNumber)`,
+      {
+        replacements: { rollNumber },
+        type: sequelize.QueryTypes.UPDATE
+      }
+    );
+  } catch (err) {
+    console.warn('[GATE] Failed to update profile total_score:', err.message);
+  }
+}
+
+/**
  * Calculate core marks from evidence fields
  * Tiers: 3/5/10/15/20/25 (highest match wins, NOT additive)
  */
@@ -38,7 +85,7 @@ function calculateCoreMark(evidence, branchThreshold) {
 
   // Tier 6: Branch-calibrated GATE score (25 marks)
   if (evidence.gate_score && evidence.branch_code && branchThreshold) {
-    if (evidence.gate_score >= branchThreshold) {
+    if (parseFloat(evidence.gate_score) >= branchThreshold) {
       coreMarks = 25;
     }
   }
@@ -53,26 +100,26 @@ function calculateCoreMark(evidence, branchThreshold) {
     if (evidence.official_appearance) {
       coreMarks = 15;
     } else if (
-      evidence.tests_completed >= 15 &&
-      evidence.full_length_tests >= 3 &&
-      evidence.average_score_percent >= 55
+      (evidence.tests_completed || 0) >= 15 &&
+      (evidence.full_length_tests || 0) >= 3 &&
+      parseFloat(evidence.average_score_percent || 0) >= 55
     ) {
       coreMarks = 15;
     }
   }
 
   // Tier 3: 10+ tests + 40% avg (10 marks)
-  if (coreMarks < 10 && evidence.tests_completed >= 10 && evidence.average_score_percent >= 40) {
+  if (coreMarks < 10 && (evidence.tests_completed || 0) >= 10 && parseFloat(evidence.average_score_percent || 0) >= 40) {
     coreMarks = 10;
   }
 
   // Tier 2: 5+ tests (5 marks)
-  if (coreMarks < 5 && evidence.tests_completed >= 5) {
+  if (coreMarks < 5 && (evidence.tests_completed || 0) >= 5) {
     coreMarks = 5;
   }
 
   // Tier 1: diagnostic + 3 tests (3 marks)
-  if (coreMarks < 3 && evidence.diagnostic_completed && evidence.tests_completed >= 3) {
+  if (coreMarks < 3 && evidence.diagnostic_completed && (evidence.tests_completed || 0) >= 3) {
     coreMarks = 3;
   }
 
@@ -96,7 +143,7 @@ router.post(
       .withMessage('exam_year must be between 2020-2030'),
     body('tests_completed').optional().isInt({ min: 0 }),
     body('full_length_tests').optional().isInt({ min: 0 }),
-    body('average_score_percent').optional().isDecimal(),
+    body('average_score_percent').optional(),
     body('diagnostic_completed').optional().isBoolean(),
     body('official_appearance').optional().isBoolean(),
     body('qualified').optional({ checkFalsy: true }).isBoolean(),
@@ -107,7 +154,7 @@ router.post(
   validate,
   async (req, res, next) => {
     try {
-      const studentId = req.user.roll_number;
+      const studentRoll = req.user.roll_number || req.user.id_number;
       const {
         exam_type,
         exam_year,
@@ -122,18 +169,17 @@ router.post(
         certificate_url
       } = req.body;
 
-      // Determine if bonus exam
+      const canonicalRoll = await resolveStudentRoll(studentRoll);
       const is_bonus_exam = BONUS_EXAMS.includes(exam_type);
-
-      // Create distinct_key: exam_type + exam_year
       const distinct_key = exam_year ? `${exam_type}_${exam_year}` : exam_type;
+      const distinct_key_norm = distinct_key.toLowerCase().trim();
 
-      // Check for duplicate
       const existing = await sequelize.query(
         `SELECT id FROM gate_exam_evidence
-         WHERE student_id = :studentId AND distinct_key_normalized = lower(trim(:distinct_key))`,
+         WHERE LOWER(roll_number) = LOWER(:canonicalRoll) 
+           AND (distinct_key_normalized = :distinct_key_norm OR distinct_key = :distinct_key)`,
         {
-          replacements: { studentId, distinct_key },
+          replacements: { canonicalRoll, distinct_key, distinct_key_norm },
           type: sequelize.QueryTypes.SELECT
         }
       );
@@ -146,24 +192,24 @@ router.post(
         });
       }
 
-      // Insert new evidence
-      const result = await sequelize.query(
+      const insertResult = await sequelize.query(
         `INSERT INTO gate_exam_evidence
-         (student_id, distinct_key, exam_type, exam_year,
+         (roll_number, distinct_key, distinct_key_normalized, exam_type, exam_year,
           tests_completed, full_length_tests, average_score_percent,
           diagnostic_completed, official_appearance, qualified,
           gate_score, branch_code, is_bonus_exam, certificate_url,
-          status, verification_source, submitted_at)
-         VALUES (:studentId, :distinct_key, :exam_type, :exam_year,
+          status, submitted_at)
+         VALUES (:canonicalRoll, :distinct_key, :distinct_key_norm, :exam_type, :exam_year,
                  :tests_completed, :full_length_tests, :average_score_percent,
                  :diagnostic_completed, :official_appearance, :qualified,
                  :gate_score, :branch_code, :is_bonus_exam, :certificate_url,
-                 'PENDING', 'MENTOR_MANUAL', NOW())
-         RETURNING *`,
+                 'PENDING', NOW())
+         RETURNING id, roll_number, exam_type, is_bonus_exam, status, submitted_at`,
         {
           replacements: {
-            studentId,
+            canonicalRoll,
             distinct_key,
+            distinct_key_norm,
             exam_type,
             exam_year: exam_year || null,
             tests_completed: tests_completed || 0,
@@ -181,20 +227,13 @@ router.post(
         }
       );
 
-      const evidence = result[0][0];
+      const evidence = insertResult[0][0];
 
       res.status(201).json({
         success: true,
         message: 'Exam evidence submitted successfully',
-        evidence: {
-          id: evidence.id,
-          exam_type: evidence.exam_type,
-          is_bonus_exam: evidence.is_bonus_exam,
-          status: evidence.status,
-          submitted_at: evidence.submitted_at
-        }
+        evidence
       });
-
     } catch (err) {
       console.error('[GATE] Submit error:', err.message);
       next(err);
@@ -214,8 +253,10 @@ router.get(
   async (req, res, next) => {
     try {
       const { studentId } = req.params;
+      const canonicalRoll = await resolveStudentRoll(studentId);
 
-      if (req.user.roll_number !== studentId && req.user.role !== 'mentor' && req.user.role !== 'admin') {
+      const reqRoll = req.user.roll_number || req.user.id_number;
+      if (req.user.role !== 'mentor' && req.user.role !== 'admin' && reqRoll.toLowerCase() !== studentId.toLowerCase() && reqRoll.toLowerCase() !== canonicalRoll.toLowerCase()) {
         return res.status(403).json({
           success: false,
           error: 'Forbidden',
@@ -224,11 +265,30 @@ router.get(
       }
 
       const evidence = await sequelize.query(
-        `SELECT * FROM gate_exam_evidence
-         WHERE student_id = :studentId
+        `SELECT 
+          id,
+          roll_number as student_id,
+          exam_type,
+          exam_year,
+          tests_completed,
+          full_length_tests,
+          average_score_percent,
+          diagnostic_completed,
+          official_appearance,
+          qualified,
+          gate_score,
+          branch_code,
+          is_bonus_exam,
+          certificate_url,
+          status,
+          verified_by_mentor_roll as mentor_id,
+          verified_at,
+          submitted_at
+         FROM gate_exam_evidence
+         WHERE LOWER(roll_number) = LOWER(:canonicalRoll)
          ORDER BY submitted_at DESC`,
         {
-          replacements: { studentId },
+          replacements: { canonicalRoll },
           type: sequelize.QueryTypes.SELECT
         }
       );
@@ -237,168 +297,8 @@ router.get(
         success: true,
         evidence: evidence || []
       });
-
     } catch (err) {
       console.error('[GATE] Get evidence error:', err.message);
-      next(err);
-    }
-  }
-);
-
-/**
- * POST /api/gate/:id/verify
- * Mentor verifies GATE exam evidence
- */
-router.post(
-  '/:id/verify',
-  authenticate,
-  [
-    param('id').isInt().withMessage('id must be an integer'),
-    body('action')
-      .isIn(['VERIFIED', 'REJECTED'])
-      .withMessage('action must be VERIFIED or REJECTED'),
-    body('rejection_reason')
-      .if(body('action').equals('REJECTED'))
-      .notEmpty()
-      .withMessage('rejection_reason is required when rejecting'),
-  ],
-  validate,
-  async (req, res, next) => {
-    try {
-      const { id } = req.params;
-      const { action, rejection_reason } = req.body;
-
-      // Get evidence
-      const evidence = await sequelize.query(
-        `SELECT * FROM gate_exam_evidence WHERE id = :id`,
-        {
-          replacements: { id },
-          type: sequelize.QueryTypes.SELECT
-        }
-      );
-
-      if (evidence.length === 0) {
-        return res.status(404).json({
-          success: false,
-          error: 'Not found',
-          message: 'Evidence not found'
-        });
-      }
-
-      if (evidence[0].status !== 'PENDING') {
-        return res.status(400).json({
-          success: false,
-          error: 'Invalid status',
-          message: `Evidence is already ${evidence[0].status}`
-        });
-      }
-
-      // Update status
-      await sequelize.query(
-        `UPDATE gate_exam_evidence
-         SET status = :status,
-             mentor_id = :mentorId,
-             verified_at = NOW(),
-             rejection_reason = :rejectionReason
-         WHERE id = :id`,
-        {
-          replacements: {
-            id,
-            status: action,
-            mentorId: null, // TODO: Use actual mentor ID from req.user
-            rejectionReason: action === 'REJECTED' ? rejection_reason : null
-          },
-          type: sequelize.QueryTypes.UPDATE
-        }
-      );
-
-      // If verified, recalculate marks
-      if (action === 'VERIFIED') {
-        const allEvidence = await sequelize.query(
-          `SELECT * FROM gate_exam_evidence
-           WHERE student_id = :studentId AND status = 'VERIFIED'`,
-          {
-            replacements: { studentId: evidence[0].student_id },
-            type: sequelize.QueryTypes.SELECT
-          }
-        );
-
-        // Calculate best core marks
-        let bestCore = 0;
-        for (const ev of allEvidence) {
-          if (!ev.is_bonus_exam) {
-            // Get branch threshold if applicable
-            let branchThreshold = null;
-            if (ev.gate_score && ev.branch_code) {
-              const calibration = await sequelize.query(
-                `SELECT threshold_score FROM gate_branch_calibration
-                 WHERE branch = :branch AND year = :year`,
-                {
-                  replacements: {
-                    branch: ev.branch_code,
-                    year: ev.exam_year || new Date().getFullYear()
-                  },
-                  type: sequelize.QueryTypes.SELECT
-                }
-              );
-              if (calibration.length > 0) {
-                branchThreshold = parseFloat(calibration[0].threshold_score);
-              }
-            }
-
-            const coreMarks = calculateCoreMark(ev, branchThreshold);
-            bestCore = Math.max(bestCore, coreMarks);
-          }
-        }
-
-        // Calculate bonus (only if core >= 5)
-        let bonus = 0;
-        if (bestCore >= 5) {
-          for (const ev of allEvidence) {
-            if (ev.is_bonus_exam) {
-              if (['GRE', 'GMAT', 'CAT'].includes(ev.exam_type)) {
-                bonus = Math.max(bonus, 3);
-              } else if (['TOEFL', 'IELTS', 'PTE'].includes(ev.exam_type)) {
-                bonus = Math.max(bonus, 5);
-              }
-            }
-          }
-        }
-
-        // Cap final marks at 25
-        const finalMarks = Math.min(25, bestCore + bonus);
-
-        // Delete existing score
-        await sequelize.query(
-          `DELETE FROM scores WHERE register_number = :studentId AND parameter = 'gate'`,
-          {
-            replacements: { studentId: evidence[0].student_id },
-            type: sequelize.QueryTypes.DELETE
-          }
-        );
-
-        // Insert new score
-        await sequelize.query(
-          `INSERT INTO scores (register_number, parameter, marks, semester, provisional, calculated_at)
-           VALUES (:studentId, 'gate', :marks, 1, false, NOW())`,
-          {
-            replacements: {
-              studentId: evidence[0].student_id,
-              marks: finalMarks
-            },
-            type: sequelize.QueryTypes.INSERT
-          }
-        );
-      }
-
-      res.json({
-        success: true,
-        message: `Evidence ${action.toLowerCase()} successfully`,
-        action
-      });
-
-    } catch (err) {
-      console.error('[GATE] Verify error:', err.message);
       next(err);
     }
   }
@@ -413,20 +313,22 @@ router.get(
   authenticate,
   async (req, res, next) => {
     try {
-      // Require mentor or admin role
       if (req.user.role !== 'mentor' && req.user.role !== 'admin') {
         return res.status(403).json({
           success: false,
           error: 'Forbidden',
-          message: 'Only mentors can access this endpoint'
+          message: 'Only mentors and administrators can access pending queue'
         });
       }
 
-      // Scope to mentor's department (admins see all)
+      const mentorDept = req.user.department;
+      const mentorRole = req.user.role;
+      const mentorRoll = req.user.roll_number || req.user.id_number;
+
       const evidence = await sequelize.query(
         `SELECT
           e.id,
-          e.student_id,
+          e.roll_number as student_id,
           e.exam_type,
           e.exam_year,
           e.tests_completed,
@@ -441,20 +343,24 @@ router.get(
           e.certificate_url,
           e.status,
           e.submitted_at,
-          p.name as student_name,
-          p.department
+          s.name as student_name,
+          s.department,
+          s.register_number
          FROM gate_exam_evidence e
-         JOIN profiles p ON e.student_id = p.id_number
+         JOIN students s ON LOWER(e.roll_number) = LOWER(s.roll_number)
          WHERE e.status = 'PENDING'
            AND (
              :mentorRole = 'admin'
-             OR p.department = :mentorDepartment
+             OR :mentorDept = 'ALL'
+             OR s.mentor_roll_number = :mentorRoll
+             OR (s.mentor_roll_number IS NULL AND s.department = :mentorDept)
            )
          ORDER BY e.submitted_at ASC`,
         {
           replacements: {
-            mentorRole: req.user.role,
-            mentorDepartment: req.user.department
+            mentorRole,
+            mentorDept,
+            mentorRoll
           },
           type: sequelize.QueryTypes.SELECT
         }
@@ -465,9 +371,158 @@ router.get(
         evidence: evidence || [],
         count: evidence?.length || 0
       });
-
     } catch (err) {
       console.error('[GATE] Get pending error:', err.message);
+      next(err);
+    }
+  }
+);
+
+/**
+ * POST /api/gate/:id/verify
+ * Mentor verifies GATE exam evidence
+ */
+router.post(
+  '/:id/verify',
+  authenticate,
+  [
+    param('id').isUUID().withMessage('id must be a valid UUID'),
+    body('action')
+      .isIn(['VERIFIED', 'REJECTED'])
+      .withMessage('action must be VERIFIED or REJECTED'),
+    body('rejection_reason')
+      .if(body('action').equals('REJECTED'))
+      .notEmpty()
+      .withMessage('rejection_reason is required when rejecting'),
+  ],
+  validate,
+  async (req, res, next) => {
+    try {
+      if (req.user.role !== 'mentor' && req.user.role !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          error: 'Forbidden',
+          message: 'Only mentors and administrators can verify evidence'
+        });
+      }
+
+      const { id } = req.params;
+      const { action } = req.body;
+      const mentorRoll = req.user.roll_number || req.user.id_number || 'MENTOR';
+
+      const evidence = await sequelize.query(
+        `SELECT * FROM gate_exam_evidence WHERE id = :id`,
+        {
+          replacements: { id },
+          type: sequelize.QueryTypes.SELECT
+        }
+      );
+
+      if (evidence.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: 'Not found',
+          message: 'Evidence record not found'
+        });
+      }
+
+      const studentRoll = evidence[0].roll_number;
+
+      await sequelize.query(
+        `UPDATE gate_exam_evidence
+         SET status = :status,
+             verified_by_mentor_roll = :mentorRoll,
+             verified_at = NOW()
+         WHERE id = :id`,
+        {
+          replacements: {
+            id,
+            status: action,
+            mentorRoll
+          },
+          type: sequelize.QueryTypes.UPDATE
+        }
+      );
+
+      if (action === 'VERIFIED') {
+        const allEvidence = await sequelize.query(
+          `SELECT * FROM gate_exam_evidence
+           WHERE LOWER(roll_number) = LOWER(:studentRoll) AND status = 'VERIFIED'`,
+          {
+            replacements: { studentRoll },
+            type: sequelize.QueryTypes.SELECT
+          }
+        );
+
+        let bestCore = 0;
+        for (const ev of (allEvidence || [])) {
+          if (!ev.is_bonus_exam) {
+            let branchThreshold = null;
+            if (ev.gate_score && ev.branch_code) {
+              try {
+                const calibration = await sequelize.query(
+                  `SELECT threshold_score FROM gate_branch_calibration
+                   WHERE branch = :branch AND year = :year`,
+                  {
+                    replacements: {
+                      branch: ev.branch_code,
+                      year: ev.exam_year || new Date().getFullYear()
+                    },
+                    type: sequelize.QueryTypes.SELECT
+                  }
+                );
+                if (calibration.length > 0) {
+                  branchThreshold = parseFloat(calibration[0].threshold_score);
+                }
+              } catch (calErr) {
+                // ignore
+              }
+            }
+
+            const coreMarks = calculateCoreMark(ev, branchThreshold);
+            bestCore = Math.max(bestCore, coreMarks);
+          }
+        }
+
+        let bonus = 0;
+        if (bestCore >= 5) {
+          for (const ev of (allEvidence || [])) {
+            if (ev.is_bonus_exam) {
+              if (['GRE', 'GMAT', 'CAT'].includes(ev.exam_type)) {
+                bonus = Math.max(bonus, 3);
+              } else if (['TOEFL', 'IELTS', 'PTE'].includes(ev.exam_type)) {
+                bonus = Math.max(bonus, 5);
+              }
+            }
+          }
+        }
+
+        const finalMarks = Math.min(25, bestCore + bonus);
+
+        await sequelize.query(
+          `INSERT INTO scores (roll_number, parameter_id, marks, semester, provisional, calculated_at)
+           VALUES (:studentRoll, 'gate', :finalMarks, 1, false, NOW())
+           ON CONFLICT (roll_number, parameter_id, semester)
+           DO UPDATE SET marks = EXCLUDED.marks, provisional = false, calculated_at = NOW()`,
+          {
+            replacements: {
+              studentRoll,
+              finalMarks
+            },
+            type: sequelize.QueryTypes.INSERT
+          }
+        );
+
+        await updateStudentProfileScore(studentRoll);
+      }
+
+      res.json({
+        success: true,
+        message: `Evidence ${action.toLowerCase()} successfully`,
+        action
+      });
+    } catch (err) {
+      console.error('[GATE] Verify error:', err.message);
       next(err);
     }
   }
@@ -485,18 +540,16 @@ router.get(
   async (req, res, next) => {
     try {
       const { studentId } = req.params;
-      const cleanId = String(studentId).trim();
+      const canonicalRoll = await resolveStudentRoll(studentId);
 
       // 1. Check scores table first
       const scoreRows = await sequelize.query(
         `SELECT marks FROM scores 
-         WHERE (LOWER(roll_number) = LOWER(:cleanId) OR LOWER(roll_number) IN (
-           SELECT LOWER(roll_number) FROM students WHERE LOWER(register_number) = LOWER(:cleanId)
-         ))
-         AND parameter_id IN ('gate', 'gate_exam')
+         WHERE LOWER(roll_number) = LOWER(:canonicalRoll)
+           AND parameter_id IN ('gate', 'gate_exam', 'gate_score')
          ORDER BY marks DESC LIMIT 1`,
         {
-          replacements: { cleanId },
+          replacements: { canonicalRoll },
           type: sequelize.QueryTypes.SELECT
         }
       );
@@ -504,7 +557,7 @@ router.get(
       if (scoreRows && scoreRows.length > 0 && parseFloat(scoreRows[0].marks) > 0) {
         return res.json({
           success: true,
-          student_id: cleanId,
+          student_id: canonicalRoll,
           marks: parseFloat(scoreRows[0].marks),
           total_marks: parseFloat(scoreRows[0].marks),
           max_marks: 25
@@ -514,16 +567,13 @@ router.get(
       // 2. Check gate_exam_evidence table
       const allEvidence = await sequelize.query(
         `SELECT * FROM gate_exam_evidence
-         WHERE (LOWER(roll_number) = LOWER(:cleanId) OR LOWER(roll_number) IN (
-           SELECT LOWER(roll_number) FROM students WHERE LOWER(register_number) = LOWER(:cleanId)
-         )) AND status = 'VERIFIED'`,
+         WHERE LOWER(roll_number) = LOWER(:canonicalRoll) AND status = 'VERIFIED'`,
         {
-          replacements: { cleanId },
+          replacements: { canonicalRoll },
           type: sequelize.QueryTypes.SELECT
         }
       );
 
-      // Calculate best core marks
       let bestCore = 0;
       for (const ev of (allEvidence || [])) {
         if (!ev.is_bonus_exam) {
@@ -545,7 +595,7 @@ router.get(
                 branchThreshold = parseFloat(calibration[0].threshold_score);
               }
             } catch (calErr) {
-              // fallback
+              // ignore
             }
           }
 
@@ -554,7 +604,6 @@ router.get(
         }
       }
 
-      // Calculate bonus (only if core >= 5)
       let bonus = 0;
       if (bestCore >= 5) {
         for (const ev of (allEvidence || [])) {
@@ -572,7 +621,7 @@ router.get(
 
       res.json({
         success: true,
-        student_id: cleanId,
+        student_id: canonicalRoll,
         marks: finalMarks,
         core_marks: bestCore,
         bonus_marks: bonus,
@@ -580,7 +629,6 @@ router.get(
         max_marks: 25,
         exams_count: allEvidence ? allEvidence.length : 0
       });
-
     } catch (err) {
       console.error('[GATE] Calculate marks error:', err.message);
       next(err);

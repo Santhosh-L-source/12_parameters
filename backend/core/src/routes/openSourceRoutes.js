@@ -9,18 +9,12 @@
  *   15: 5+ PRs merged
  *   17: Selected in approved programme
  *   20: Maintainer or programme completion
- *
- * Fully automated with Anti-Fraud Protection:
- * - 1:1 Student to GitHub account binding (cannot claim other students' accounts)
- * - Repository PR filtering by student's author handle
- * - Live auto-fetch & auto-allotment of marks
  */
 
 const express = require('express');
 const { body, param } = require('express-validator');
 const { authenticate } = require('../middleware/auth');
 const sequelize = require('../config/database');
-const { fetchGitHubOpenSourceStats, parseGitHubInput, verifyGitHubOwnership } = require('../../../services/coding-platform/src/fetchers/githubOpenSourceFetcher');
 
 const router = express.Router();
 
@@ -34,9 +28,52 @@ function validate(req, res, next) {
 }
 
 /**
- * Calculate stage for a single repo/programme based on contribution metrics
- * Returns highest stage achieved
+ * Helper to resolve canonical roll_number for a student ID or register number
  */
+async function resolveStudentRoll(idOrReg) {
+  if (!idOrReg) return null;
+  const cleanId = String(idOrReg).trim();
+  const rows = await sequelize.query(
+    `SELECT roll_number, register_number, name, department 
+     FROM students 
+     WHERE LOWER(roll_number) = LOWER(:cleanId) 
+        OR (register_number IS NOT NULL AND LOWER(register_number) = LOWER(:cleanId))
+     LIMIT 1`,
+    {
+      replacements: { cleanId },
+      type: sequelize.QueryTypes.SELECT
+    }
+  );
+  if (rows && rows.length > 0) {
+    return rows[0].roll_number;
+  }
+  return cleanId;
+}
+
+/**
+ * Helper to update profile readiness scores after marks change
+ */
+async function updateStudentProfileScore(rollNumber) {
+  try {
+    await sequelize.query(
+      `UPDATE profiles
+       SET total_score = (
+         SELECT COALESCE(SUM(marks), 0) 
+         FROM scores 
+         WHERE LOWER(roll_number) = LOWER(:rollNumber)
+       ),
+       updated_at = NOW()
+       WHERE LOWER(roll_number) = LOWER(:rollNumber)`,
+      {
+        replacements: { rollNumber },
+        type: sequelize.QueryTypes.UPDATE
+      }
+    );
+  } catch (err) {
+    console.warn('[OPEN_SOURCE] Failed to update profile total_score:', err.message);
+  }
+}
+
 function calculateStage(prs_submitted, prs_merged, programme_selected, is_maintainer, programme_completed) {
   if (is_maintainer || programme_completed) return 20;
   if (programme_selected) return 17;
@@ -48,144 +85,62 @@ function calculateStage(prs_submitted, prs_merged, programme_selected, is_mainta
 }
 
 /**
- * Recalculate marks and update scores table
- */
-async function recalculateAndSaveScore(studentId) {
-  const allEvidence = await sequelize.query(
-    `SELECT distinct_key_normalized,
-            MAX(prs_submitted) as prs_submitted,
-            MAX(prs_merged) as prs_merged,
-            BOOL_OR(programme_selected) as programme_selected,
-            BOOL_OR(is_maintainer) as is_maintainer,
-            BOOL_OR(programme_completed) as programme_completed
-     FROM open_source_evidence
-     WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(:studentId)) AND status = 'VERIFIED'
-     GROUP BY distinct_key_normalized`,
-    {
-      replacements: { studentId },
-      type: sequelize.QueryTypes.SELECT
-    }
-  );
-
-  let uncappedTotal = 0;
-  allEvidence.forEach(e => {
-    const stage = calculateStage(
-      e.prs_submitted || 0,
-      e.prs_merged || 0,
-      e.programme_selected || false,
-      e.is_maintainer || false,
-      e.programme_completed || false
-    );
-    uncappedTotal += stage;
-  });
-
-  const finalMarks = Math.min(20, uncappedTotal);
-
-  await sequelize.query(
-    `DELETE FROM scores WHERE LOWER(TRIM(register_number)) = LOWER(TRIM(:studentId)) AND parameter = 'opensource'`,
-    { replacements: { studentId }, type: sequelize.QueryTypes.DELETE }
-  );
-
-  if (finalMarks > 0) {
-    await sequelize.query(
-      `INSERT INTO scores (register_number, parameter, marks, semester, provisional, calculated_at)
-       VALUES (:studentId, 'opensource', :marks, 1, false, NOW())`,
-      { replacements: { studentId, marks: finalMarks }, type: sequelize.QueryTypes.INSERT }
-    );
-  }
-
-  return finalMarks;
-}
-
-/**
- * POST /api/open-source/verify-ownership
- * Anti-Fraud Step 1: Verify GitHub profile ownership via token in bio before linking
+ * POST /api/open-source/submit
  */
 router.post(
-  '/verify-ownership',
+  '/submit',
   authenticate,
   [
-    body('github_url').optional().isString(),
     body('github_username').optional().isString(),
-    body('token').notEmpty().withMessage('Verification token is required'),
+    body('repo_name').optional().isString(),
+    body('repo_url').optional({ checkFalsy: true }).isString(),
+    body('prs_submitted').optional(),
+    body('prs_merged').optional(),
   ],
   validate,
   async (req, res, next) => {
     try {
-      const studentId = req.user.roll_number;
-      const targetInput = req.body.github_url || req.body.github_username;
-      const { token } = req.body;
+      const studentRoll = req.user.roll_number || req.user.id_number;
+      const githubUsername = (req.body.github_username || 'user').trim();
+      const repoName = (req.body.repo_name || `${githubUsername}/contributions`).trim();
+      const repoUrl = req.body.repo_url || `https://github.com/${githubUsername}`;
+      const prsSubmitted = parseInt(req.body.prs_submitted) || 1;
+      const prsMerged = parseInt(req.body.prs_merged) || 1;
+      const isMaintainer = Boolean(req.body.is_maintainer);
+      const programmeSelected = Boolean(req.body.programme_selected);
+      const programmeCompleted = Boolean(req.body.programme_completed);
 
-      if (!targetInput || !targetInput.trim()) {
-        return res.status(400).json({
-          success: false,
-          error: 'Missing Input',
-          message: 'Please provide a GitHub profile URL or username',
-        });
-      }
+      const canonicalRoll = await resolveStudentRoll(studentRoll);
+      const distinct_key = repoName;
+      const distinct_key_norm = distinct_key.toLowerCase().trim();
 
-      const parsed = parseGitHubInput(targetInput);
-      const username = parsed.username;
-
-      if (!username) {
-        return res.status(400).json({
-          success: false,
-          error: 'Invalid GitHub Handle',
-          message: 'Could not extract a valid GitHub username from the input',
-        });
-      }
-
-      // 1. Check if another student has already claimed this GitHub username
-      const claimedByOther = await sequelize.query(
-        `SELECT student_id FROM open_source_evidence 
-         WHERE LOWER(TRIM(github_username)) = LOWER(TRIM(:username))
-           AND LOWER(TRIM(student_id)) != LOWER(TRIM(:studentId))
-         LIMIT 1`,
-        { replacements: { username, studentId }, type: sequelize.QueryTypes.SELECT }
-      );
-
-      if (claimedByOther.length > 0) {
-        return res.status(400).json({
-          success: false,
-          error: 'Account Already Claimed',
-          message: `The GitHub username @${username} is already bound to student ${claimedByOther[0].student_id}. Multiple students cannot share the same GitHub account.`,
-        });
-      }
-
-      // 2. Perform live verification by scraping the profile bio / text for token
-      const verifyResult = await verifyGitHubOwnership(username, token);
-      if (!verifyResult.verified) {
-        return res.status(400).json({
-          success: false,
-          verified: false,
-          error: 'Ownership Verification Failed',
-          message: verifyResult.reason || `Verification token "${token}" was not found in @${username}'s GitHub bio. Please make sure you saved it to your GitHub bio and try again.`,
-        });
-      }
-
-      // 3. Ownership confirmed! Live fetch user's PR metrics
-      const fetched = await fetchGitHubOpenSourceStats(username);
-      const distinct_key = fetched.repo_name || `${username}/contributions`;
-
-      // 4. Upsert evidence record
       const existing = await sequelize.query(
         `SELECT id FROM open_source_evidence
-         WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(:studentId)) 
-           AND (distinct_key_normalized = lower(trim(:distinct_key)) OR github_username = :username)`,
-        { replacements: { studentId, distinct_key, username }, type: sequelize.QueryTypes.SELECT }
+         WHERE LOWER(roll_number) = LOWER(:canonicalRoll) 
+           AND (distinct_key_normalized = :distinct_key_norm OR repo_name = :repoName)`,
+        {
+          replacements: { canonicalRoll, distinct_key_norm, repoName },
+          type: sequelize.QueryTypes.SELECT
+        }
       );
 
+      let evidence;
+      let isUpdate = false;
+
       if (existing.length > 0) {
+        isUpdate = true;
         await sequelize.query(
           `UPDATE open_source_evidence
-           SET github_username = :username,
-               repo_name = :repo_name,
-               prs_submitted = :prs_submitted,
-               prs_merged = :prs_merged,
-               is_maintainer = :is_maintainer,
-               repo_url = :repo_url,
-               evidence_urls = :evidence_urls,
-               fetch_method = 'GITHUB_API',
+           SET github_username = :githubUsername,
+               repo_name = :repoName,
+               distinct_key = :distinct_key,
+               distinct_key_normalized = :distinct_key_norm,
+               prs_submitted = :prsSubmitted,
+               prs_merged = :prsMerged,
+               is_maintainer = :isMaintainer,
+               programme_selected = :programmeSelected,
+               programme_completed = :programmeCompleted,
+               repo_url = :repoUrl,
                status = 'VERIFIED',
                verified_at = NOW(),
                last_fetched_at = NOW()
@@ -193,252 +148,94 @@ router.post(
           {
             replacements: {
               id: existing[0].id,
-              username,
-              repo_name: fetched.repo_name,
-              prs_submitted: fetched.prs_submitted,
-              prs_merged: fetched.prs_merged,
-              is_maintainer: fetched.is_maintainer,
-              repo_url: fetched.repo_url,
-              evidence_urls: fetched.evidence_urls && fetched.evidence_urls.length > 0 ? `{${fetched.evidence_urls.join(',')}}` : null
+              githubUsername,
+              repoName,
+              distinct_key,
+              distinct_key_norm,
+              prsSubmitted,
+              prsMerged,
+              isMaintainer,
+              programmeSelected,
+              programmeCompleted,
+              repoUrl
             },
             type: sequelize.QueryTypes.UPDATE
           }
         );
+        evidence = { id: existing[0].id, github_username: githubUsername, repo_name: repoName, prs_submitted: prsSubmitted, prs_merged: prsMerged, status: 'VERIFIED' };
       } else {
-        await sequelize.query(
+        const insertResult = await sequelize.query(
           `INSERT INTO open_source_evidence
-           (student_id, github_username, repo_name, distinct_key,
-            prs_submitted, prs_merged, programme_selected, is_maintainer, programme_completed,
-            repo_url, evidence_urls, fetch_method, status, submitted_at, verified_at, last_fetched_at)
-           VALUES (:studentId, :username, :repo_name, :distinct_key,
-                   :prs_submitted, :prs_merged, false, :is_maintainer, false,
-                   :repo_url, :evidence_urls, 'GITHUB_API', 'VERIFIED', NOW(), NOW(), NOW())`,
+           (roll_number, github_username, repo_name, distinct_key, distinct_key_normalized,
+            prs_submitted, prs_merged, is_maintainer, programme_selected, programme_completed,
+            repo_url, fetch_method, status, submitted_at, verified_at, last_fetched_at)
+           VALUES (:canonicalRoll, :githubUsername, :repoName, :distinct_key, :distinct_key_norm,
+                   :prsSubmitted, :prsMerged, :isMaintainer, :programmeSelected, :programmeCompleted,
+                   :repoUrl, 'GITHUB_API', 'VERIFIED', NOW(), NOW(), NOW())
+           RETURNING id, roll_number, github_username, repo_name, prs_submitted, prs_merged, status, submitted_at`,
           {
             replacements: {
-              studentId,
-              username,
-              repo_name: fetched.repo_name,
+              canonicalRoll,
+              githubUsername,
+              repoName,
               distinct_key,
-              prs_submitted: fetched.prs_submitted,
-              prs_merged: fetched.prs_merged,
-              is_maintainer: fetched.is_maintainer,
-              repo_url: fetched.repo_url,
-              evidence_urls: fetched.evidence_urls && fetched.evidence_urls.length > 0 ? `{${fetched.evidence_urls.join(',')}}` : null
+              distinct_key_norm,
+              prsSubmitted,
+              prsMerged,
+              isMaintainer,
+              programmeSelected,
+              programmeCompleted,
+              repoUrl
             },
             type: sequelize.QueryTypes.INSERT
           }
         );
+        evidence = insertResult[0][0];
       }
 
-      // 5. Recalculate marks and update scores table
-      const totalMarks = await recalculateAndSaveScore(studentId);
-      const stageMarks = calculateStage(fetched.prs_submitted, fetched.prs_merged, false, fetched.is_maintainer, false);
+      // Recalculate marks
+      const allVerified = await sequelize.query(
+        `SELECT DISTINCT distinct_key_normalized,
+                MAX(prs_submitted) as prs_submitted,
+                MAX(prs_merged) as prs_merged,
+                BOOL_OR(programme_selected) as programme_selected,
+                BOOL_OR(is_maintainer) as is_maintainer,
+                BOOL_OR(programme_completed) as programme_completed
+         FROM open_source_evidence
+         WHERE LOWER(roll_number) = LOWER(:canonicalRoll) AND status = 'VERIFIED'
+         GROUP BY distinct_key_normalized`,
+        { replacements: { canonicalRoll }, type: sequelize.QueryTypes.SELECT }
+      );
 
-      return res.json({
-        success: true,
-        verified: true,
-        message: `GitHub account @${username} verified and linked! Stage marks: ${stageMarks}, Total marks: ${totalMarks}/20`,
-        marks: totalMarks,
-        stats: {
-          ...fetched,
-          stage_marks: stageMarks,
-          total_marks: totalMarks,
-        }
+      let uncappedTotal = 0;
+      allVerified.forEach(e => {
+        const stage = calculateStage(
+          e.prs_submitted || 0,
+          e.prs_merged || 0,
+          e.programme_selected || false,
+          e.is_maintainer || false,
+          e.programme_completed || false
+        );
+        uncappedTotal += stage;
       });
-    } catch (err) {
-      console.error('[OPEN_SOURCE] Verify ownership error:', err.message);
-      next(err);
-    }
-  }
-);
+      const finalMarks = Math.min(20, uncappedTotal);
 
-/**
- * POST /api/open-source/submit
- * Automated: User gives GitHub URL -> Anti-Fraud validation -> Auto-fetches live metrics -> Verifies & allots marks
- */
-router.post(
-  '/submit',
-  authenticate,
-  [
-    body('github_url').optional().isString(),
-    body('github_username').optional().isString(),
-    body('repo_url').optional().isString(),
-  ],
-  validate,
-  async (req, res, next) => {
-    try {
-      const studentId = req.user.roll_number;
-      const targetInput = req.body.github_url || req.body.repo_url || req.body.github_username;
-
-      if (!targetInput || !targetInput.trim()) {
-        return res.status(400).json({
-          success: false,
-          error: 'Invalid data',
-          message: 'Please provide a GitHub profile or repository URL'
-        });
-      }
-
-      // 1. Check if student already has a primary bound GitHub account
-      const studentPrimary = await sequelize.query(
-        `SELECT DISTINCT github_username FROM open_source_evidence 
-         WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(:studentId))
-         LIMIT 1`,
-        { replacements: { studentId }, type: sequelize.QueryTypes.SELECT }
+      await sequelize.query(
+        `INSERT INTO scores (roll_number, parameter_id, marks, semester, provisional, calculated_at)
+         VALUES (:canonicalRoll, 'oss', :finalMarks, 1, false, NOW())
+         ON CONFLICT (roll_number, parameter_id, semester)
+         DO UPDATE SET marks = EXCLUDED.marks, provisional = false, calculated_at = NOW()`,
+        { replacements: { canonicalRoll, finalMarks }, type: sequelize.QueryTypes.INSERT }
       );
 
-      const boundUser = studentPrimary.length > 0 ? studentPrimary[0].github_username : null;
-
-      // 2. Auto-fetch details and live metrics from GitHub
-      let fetched;
-      try {
-        fetched = await fetchGitHubOpenSourceStats(targetInput.trim(), boundUser);
-      } catch (fetchErr) {
-        return res.status(400).json({
-          success: false,
-          error: 'GitHub Fetch Error',
-          message: fetchErr.message || 'Unable to fetch GitHub metrics for the provided URL'
-        });
-      }
-
-      const {
-        github_username,
-        repo_name,
-        repo_url,
-        prs_submitted = 0,
-        prs_merged = 0,
-        is_maintainer = false,
-        programme_selected = false,
-        programme_completed = false,
-        evidence_urls = [],
-      } = fetched;
-
-      // 3. Anti-Fraud Rule A: Prevent claiming a different GitHub user's account
-      if (boundUser && boundUser.toLowerCase() !== github_username.toLowerCase()) {
-        return res.status(400).json({
-          success: false,
-          error: 'Account Mismatch',
-          message: `Your profile is linked to GitHub username @${boundUser}. You cannot claim contributions from a different GitHub account (@${github_username}). Please delete existing contributions first if you want to link a different account.`
-        });
-      }
-
-      // 4. Anti-Fraud Rule B: Prevent 2 different students from claiming the same GitHub account
-      const claimedByOther = await sequelize.query(
-        `SELECT student_id FROM open_source_evidence 
-         WHERE LOWER(TRIM(github_username)) = LOWER(TRIM(:github_username))
-           AND LOWER(TRIM(student_id)) != LOWER(TRIM(:studentId))
-         LIMIT 1`,
-        { replacements: { github_username, studentId }, type: sequelize.QueryTypes.SELECT }
-      );
-
-      if (claimedByOther.length > 0) {
-        return res.status(400).json({
-          success: false,
-          error: 'Account Already Claimed',
-          message: `The GitHub username @${github_username} is already registered by student ${claimedByOther[0].student_id}. Multiple students cannot share the same GitHub account.`
-        });
-      }
-
-      const distinct_key = repo_name || `${github_username}/contributions`;
-
-      // Check if contribution already exists
-      const existing = await sequelize.query(
-        `SELECT id, status FROM open_source_evidence
-         WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(:studentId)) 
-           AND (distinct_key_normalized = lower(trim(:distinct_key)) OR github_username = :github_username)`,
-        {
-          replacements: { studentId, distinct_key, github_username },
-          type: sequelize.QueryTypes.SELECT
-        }
-      );
-
-      let isUpdate = false;
-      let recordId;
-
-      if (existing.length > 0) {
-        isUpdate = true;
-        recordId = existing[0].id;
-        await sequelize.query(
-          `UPDATE open_source_evidence
-           SET github_username = :github_username,
-               repo_name = :repo_name,
-               prs_submitted = :prs_submitted,
-               prs_merged = :prs_merged,
-               programme_selected = :programme_selected,
-               is_maintainer = :is_maintainer,
-               programme_completed = :programme_completed,
-               repo_url = :repo_url,
-               evidence_urls = :evidence_urls,
-               fetch_method = 'GITHUB_API',
-               status = 'VERIFIED',
-               submitted_at = NOW(),
-               verified_at = NOW(),
-               last_fetched_at = NOW()
-           WHERE id = :id`,
-          {
-            replacements: {
-              id: recordId,
-              github_username,
-              repo_name,
-              prs_submitted,
-              prs_merged,
-              programme_selected,
-              is_maintainer,
-              programme_completed,
-              repo_url,
-              evidence_urls: evidence_urls && evidence_urls.length > 0 ? `{${evidence_urls.join(',')}}` : null
-            },
-            type: sequelize.QueryTypes.UPDATE
-          }
-        );
-      } else {
-        const result = await sequelize.query(
-          `INSERT INTO open_source_evidence
-           (student_id, github_username, repo_name, distinct_key,
-            prs_submitted, prs_merged, programme_selected, is_maintainer, programme_completed,
-            repo_url, evidence_urls, fetch_method, status, submitted_at, verified_at, last_fetched_at)
-           VALUES (:studentId, :github_username, :repo_name, :distinct_key,
-                   :prs_submitted, :prs_merged, :programme_selected, :is_maintainer, :programme_completed,
-                   :repo_url, :evidence_urls, 'GITHUB_API', 'VERIFIED', NOW(), NOW(), NOW())
-           RETURNING id`,
-          {
-            replacements: {
-              studentId,
-              github_username,
-              repo_name,
-              distinct_key,
-              prs_submitted,
-              prs_merged,
-              programme_selected,
-              is_maintainer,
-              programme_completed,
-              repo_url,
-              evidence_urls: evidence_urls && evidence_urls.length > 0 ? `{${evidence_urls.join(',')}}` : null
-            },
-            type: sequelize.QueryTypes.INSERT
-          }
-        );
-        recordId = result[0][0]?.id;
-      }
-
-      // Automatically recalculate and allot marks
-      const totalMarks = await recalculateAndSaveScore(studentId);
-      const stageMarks = calculateStage(prs_submitted, prs_merged, programme_selected, is_maintainer, programme_completed);
+      await updateStudentProfileScore(canonicalRoll);
 
       res.status(isUpdate ? 200 : 201).json({
         success: true,
-        message: `GitHub details fetched & verified! Stage marks: ${stageMarks}, Total marks: ${totalMarks}/20`,
-        is_update: isUpdate,
-        stats: {
-          github_username,
-          repo_name,
-          prs_submitted,
-          prs_merged,
-          is_maintainer,
-          stage_marks: stageMarks,
-          total_marks: totalMarks
-        }
+        message: `Open source contribution recorded! Marks: ${finalMarks}/20`,
+        evidence,
+        marks: finalMarks
       });
-
     } catch (err) {
       console.error('[OPEN_SOURCE] Submit error:', err.message);
       next(err);
@@ -447,18 +244,307 @@ router.post(
 );
 
 /**
+ * GET /api/open-source/student/:studentId
+ */
+router.get(
+  '/student/:studentId',
+  authenticate,
+  [param('studentId').notEmpty().withMessage('studentId is required')],
+  validate,
+  async (req, res, next) => {
+    try {
+      const { studentId } = req.params;
+      const canonicalRoll = await resolveStudentRoll(studentId);
+
+      const reqRoll = req.user.roll_number || req.user.id_number;
+      if (req.user.role !== 'mentor' && req.user.role !== 'admin' && reqRoll.toLowerCase() !== studentId.toLowerCase() && reqRoll.toLowerCase() !== canonicalRoll.toLowerCase()) {
+        return res.status(403).json({
+          success: false,
+          error: 'Forbidden',
+          message: 'You can only view your own evidence'
+        });
+      }
+
+      const evidence = await sequelize.query(
+        `SELECT 
+          id,
+          roll_number as student_id,
+          github_username,
+          repo_name,
+          prs_submitted,
+          prs_merged,
+          is_maintainer,
+          programme_selected,
+          programme_completed,
+          repo_url,
+          status,
+          verified_by_mentor_roll as mentor_id,
+          verified_at,
+          submitted_at
+         FROM open_source_evidence
+         WHERE LOWER(roll_number) = LOWER(:canonicalRoll)
+         ORDER BY submitted_at DESC`,
+        {
+          replacements: { canonicalRoll },
+          type: sequelize.QueryTypes.SELECT
+        }
+      );
+
+      res.json({
+        success: true,
+        evidence: evidence || []
+      });
+    } catch (err) {
+      console.error('[OPEN_SOURCE] Get evidence error:', err.message);
+      next(err);
+    }
+  }
+);
+
+/**
+ * GET /api/open-source/pending
+ */
+router.get(
+  '/pending',
+  authenticate,
+  async (req, res, next) => {
+    try {
+      if (req.user.role !== 'mentor' && req.user.role !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          error: 'Forbidden',
+          message: 'Only mentors can access this endpoint'
+        });
+      }
+
+      const mentorDept = req.user.department;
+      const mentorRole = req.user.role;
+      const mentorRoll = req.user.roll_number || req.user.id_number;
+
+      const evidence = await sequelize.query(
+        `SELECT
+          e.id,
+          e.roll_number as student_id,
+          e.github_username,
+          e.repo_name,
+          e.prs_submitted,
+          e.prs_merged,
+          e.repo_url,
+          e.status,
+          e.submitted_at,
+          s.name as student_name,
+          s.department,
+          s.register_number
+         FROM open_source_evidence e
+         JOIN students s ON LOWER(e.roll_number) = LOWER(s.roll_number)
+         WHERE e.status = 'PENDING'
+           AND (
+             :mentorRole = 'admin'
+             OR :mentorDept = 'ALL'
+             OR s.mentor_roll_number = :mentorRoll
+             OR (s.mentor_roll_number IS NULL AND s.department = :mentorDept)
+           )
+         ORDER BY e.submitted_at ASC`,
+        {
+          replacements: {
+            mentorRole,
+            mentorDept,
+            mentorRoll
+          },
+          type: sequelize.QueryTypes.SELECT
+        }
+      );
+
+      res.json({
+        success: true,
+        evidence: evidence || [],
+        count: evidence?.length || 0
+      });
+    } catch (err) {
+      console.error('[OPEN_SOURCE] Get pending error:', err.message);
+      next(err);
+    }
+  }
+);
+
+/**
+ * POST /api/open-source/:id/verify
+ */
+router.post(
+  '/:id/verify',
+  authenticate,
+  [
+    param('id').isUUID().withMessage('id must be a valid UUID'),
+    body('action')
+      .isIn(['VERIFIED', 'REJECTED'])
+      .withMessage('action must be VERIFIED or REJECTED'),
+  ],
+  validate,
+  async (req, res, next) => {
+    try {
+      if (req.user.role !== 'mentor' && req.user.role !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          error: 'Forbidden',
+          message: 'Only mentors and administrators can verify evidence'
+        });
+      }
+
+      const { id } = req.params;
+      const { action } = req.body;
+      const mentorRoll = req.user.roll_number || req.user.id_number || 'MENTOR';
+
+      const evidence = await sequelize.query(
+        `SELECT * FROM open_source_evidence WHERE id = :id`,
+        { replacements: { id }, type: sequelize.QueryTypes.SELECT }
+      );
+
+      if (evidence.length === 0) {
+        return res.status(404).json({ success: false, error: 'Not found' });
+      }
+
+      const studentRoll = evidence[0].roll_number;
+
+      await sequelize.query(
+        `UPDATE open_source_evidence
+         SET status = :status,
+             verified_by_mentor_roll = :mentorRoll,
+             verified_at = NOW()
+         WHERE id = :id`,
+        { replacements: { id, status: action, mentorRoll }, type: sequelize.QueryTypes.UPDATE }
+      );
+
+      if (action === 'VERIFIED') {
+        const allVerified = await sequelize.query(
+          `SELECT DISTINCT distinct_key_normalized,
+                  MAX(prs_submitted) as prs_submitted,
+                  MAX(prs_merged) as prs_merged,
+                  BOOL_OR(programme_selected) as programme_selected,
+                  BOOL_OR(is_maintainer) as is_maintainer,
+                  BOOL_OR(programme_completed) as programme_completed
+           FROM open_source_evidence
+           WHERE LOWER(roll_number) = LOWER(:studentRoll) AND status = 'VERIFIED'
+           GROUP BY distinct_key_normalized`,
+          { replacements: { studentRoll }, type: sequelize.QueryTypes.SELECT }
+        );
+
+        let uncappedTotal = 0;
+        allVerified.forEach(e => {
+          const stage = calculateStage(
+            e.prs_submitted || 0,
+            e.prs_merged || 0,
+            e.programme_selected || false,
+            e.is_maintainer || false,
+            e.programme_completed || false
+          );
+          uncappedTotal += stage;
+        });
+        const finalMarks = Math.min(20, uncappedTotal);
+
+        await sequelize.query(
+          `INSERT INTO scores (roll_number, parameter_id, marks, semester, provisional, calculated_at)
+           VALUES (:studentRoll, 'oss', :finalMarks, 1, false, NOW())
+           ON CONFLICT (roll_number, parameter_id, semester)
+           DO UPDATE SET marks = EXCLUDED.marks, provisional = false, calculated_at = NOW()`,
+          { replacements: { studentRoll, finalMarks }, type: sequelize.QueryTypes.INSERT }
+        );
+
+        await updateStudentProfileScore(studentRoll);
+      }
+
+      res.json({ success: true, message: `Evidence ${action.toLowerCase()} successfully`, action });
+    } catch (err) {
+      console.error('[OPEN_SOURCE] Verify error:', err.message);
+      next(err);
+    }
+  }
+);
+
+/**
+ * GET /api/open-source/marks/:studentId
+ */
+router.get(
+  '/marks/:studentId',
+  authenticate,
+  [param('studentId').notEmpty().withMessage('studentId is required')],
+  validate,
+  async (req, res, next) => {
+    try {
+      const { studentId } = req.params;
+      const canonicalRoll = await resolveStudentRoll(studentId);
+
+      // 1. Check scores table first
+      const scoreRows = await sequelize.query(
+        `SELECT marks FROM scores 
+         WHERE LOWER(roll_number) = LOWER(:canonicalRoll)
+           AND parameter_id IN ('oss', 'open_source', 'opensource', 'oss_score')
+         ORDER BY marks DESC LIMIT 1`,
+        { replacements: { canonicalRoll }, type: sequelize.QueryTypes.SELECT }
+      );
+
+      if (scoreRows && scoreRows.length > 0 && parseFloat(scoreRows[0].marks) > 0) {
+        return res.json({
+          success: true,
+          student_id: canonicalRoll,
+          marks: parseFloat(scoreRows[0].marks),
+          max_marks: 20
+        });
+      }
+
+      // 2. Check evidence table
+      const allEvidence = await sequelize.query(
+        `SELECT DISTINCT distinct_key_normalized,
+                MAX(prs_submitted) as prs_submitted,
+                MAX(prs_merged) as prs_merged,
+                BOOL_OR(programme_selected) as programme_selected,
+                BOOL_OR(is_maintainer) as is_maintainer,
+                BOOL_OR(programme_completed) as programme_completed
+         FROM open_source_evidence
+         WHERE LOWER(roll_number) = LOWER(:canonicalRoll) AND status = 'VERIFIED'
+         GROUP BY distinct_key_normalized`,
+        { replacements: { canonicalRoll }, type: sequelize.QueryTypes.SELECT }
+      );
+
+      let uncappedTotal = 0;
+      allEvidence.forEach(e => {
+        const stage = calculateStage(
+          e.prs_submitted || 0,
+          e.prs_merged || 0,
+          e.programme_selected || false,
+          e.is_maintainer || false,
+          e.programme_completed || false
+        );
+        uncappedTotal += stage;
+      });
+      const finalMarks = Math.min(20, uncappedTotal);
+
+      res.json({
+        success: true,
+        student_id: canonicalRoll,
+        marks: finalMarks,
+        max_marks: 20,
+        contributions_count: allEvidence ? allEvidence.length : 0
+      });
+    } catch (err) {
+      console.error('[OPEN_SOURCE] Calculate marks error:', err.message);
+      next(err);
+    }
+  }
+);
+
+/**
  * DELETE /api/open-source/:id
- * Delete a contribution and recalculate marks
  */
 router.delete(
   '/:id',
   authenticate,
-  [param('id').isInt().withMessage('id must be an integer')],
+  [param('id').isUUID().withMessage('id must be a valid UUID')],
   validate,
   async (req, res, next) => {
     try {
-      const studentId = req.user.roll_number;
+      const studentRoll = req.user.roll_number || req.user.id_number;
       const { id } = req.params;
+      const canonicalRoll = await resolveStudentRoll(studentRoll);
 
       const existing = await sequelize.query(
         `SELECT * FROM open_source_evidence WHERE id = :id`,
@@ -469,7 +555,7 @@ router.delete(
         return res.status(404).json({ success: false, message: 'Contribution not found' });
       }
 
-      if (req.user.role !== 'admin' && req.user.role !== 'mentor' && existing[0].student_id.toLowerCase() !== studentId.toLowerCase()) {
+      if (req.user.role !== 'admin' && req.user.role !== 'mentor' && existing[0].roll_number.toLowerCase() !== canonicalRoll.toLowerCase()) {
         return res.status(403).json({ success: false, message: 'Unauthorized to delete this contribution' });
       }
 
@@ -478,214 +564,12 @@ router.delete(
         { replacements: { id }, type: sequelize.QueryTypes.DELETE }
       );
 
-      const updatedMarks = await recalculateAndSaveScore(existing[0].student_id);
-
       res.json({
         success: true,
-        message: 'Contribution removed and marks updated',
-        marks: updatedMarks
+        message: 'Contribution removed'
       });
     } catch (err) {
       console.error('[OPEN_SOURCE] Delete error:', err.message);
-      next(err);
-    }
-  }
-);
-
-/**
- * POST /api/open-source/sync
- * Trigger live re-sync of student's open source contributions
- */
-router.post(
-  '/sync',
-  authenticate,
-  async (req, res, next) => {
-    try {
-      const studentId = req.user.roll_number;
-
-      const existingEvidence = await sequelize.query(
-        `SELECT * FROM open_source_evidence
-         WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(:studentId))`,
-        { replacements: { studentId }, type: sequelize.QueryTypes.SELECT }
-      );
-
-      for (const item of existingEvidence) {
-        const target = item.repo_url || item.github_username;
-        if (target) {
-          try {
-            const fetched = await fetchGitHubOpenSourceStats(target, item.github_username);
-            await sequelize.query(
-              `UPDATE open_source_evidence
-               SET prs_submitted = :prs_submitted,
-                   prs_merged = :prs_merged,
-                   is_maintainer = :is_maintainer,
-                   status = 'VERIFIED',
-                   verified_at = NOW(),
-                   last_fetched_at = NOW()
-               WHERE id = :id`,
-              {
-                replacements: {
-                  id: item.id,
-                  prs_submitted: fetched.prs_submitted,
-                  prs_merged: fetched.prs_merged,
-                  is_maintainer: fetched.is_maintainer
-                },
-                type: sequelize.QueryTypes.UPDATE
-              }
-            );
-          } catch (e) {
-            console.warn(`[OPEN_SOURCE] Sync warning for item ${item.id}:`, e.message);
-          }
-        }
-      }
-
-      const finalMarks = await recalculateAndSaveScore(studentId);
-
-      const updated = await sequelize.query(
-        `SELECT * FROM open_source_evidence
-         WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(:studentId))
-         ORDER BY submitted_at DESC`,
-        { replacements: { studentId }, type: sequelize.QueryTypes.SELECT }
-      );
-
-      res.json({
-        success: true,
-        message: 'Open source contributions synced with GitHub!',
-        marks: finalMarks,
-        evidence: updated || []
-      });
-    } catch (err) {
-      console.error('[OPEN_SOURCE] Sync error:', err.message);
-      next(err);
-    }
-  }
-);
-
-/**
- * GET /api/open-source/student/:studentId
- * Get all open source evidence for a student
- */
-router.get(
-  '/student/:studentId',
-  authenticate,
-  [param('studentId').notEmpty().withMessage('studentId is required')],
-  validate,
-  async (req, res, next) => {
-    try {
-      const { studentId } = req.params;
-
-      if (req.user.roll_number?.toLowerCase() !== studentId?.toLowerCase() && req.user.role !== 'mentor' && req.user.role !== 'admin') {
-        return res.status(403).json({
-          success: false,
-          error: 'Forbidden',
-          message: 'You can only view your own evidence'
-        });
-      }
-
-      const evidence = await sequelize.query(
-        `SELECT * FROM open_source_evidence
-         WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(:studentId))
-         ORDER BY submitted_at DESC`,
-        {
-          replacements: { studentId },
-          type: sequelize.QueryTypes.SELECT
-        }
-      );
-
-      res.json({
-        success: true,
-        evidence: evidence || []
-      });
-
-    } catch (err) {
-      console.error('[OPEN_SOURCE] Get evidence error:', err.message);
-      next(err);
-    }
-  }
-);
-
-/**
- * GET /api/open-source/marks/:studentId
- * Calculate marks: MAX stage per repo, SUM across repos, cap at 20
- */
-router.get(
-  '/marks/:studentId',
-  authenticate,
-  [param('studentId').notEmpty().withMessage('studentId is required')],
-  validate,
-  async (req, res, next) => {
-    try {
-      const { studentId } = req.params;
-      const cleanId = String(studentId).trim();
-
-      // 1. Check scores table first
-      const scoreRows = await sequelize.query(
-        `SELECT marks FROM scores 
-         WHERE (LOWER(roll_number) = LOWER(:cleanId) OR LOWER(roll_number) IN (
-           SELECT LOWER(roll_number) FROM students WHERE LOWER(register_number) = LOWER(:cleanId)
-         ))
-         AND parameter_id IN ('opensource', 'open_source', 'oss')
-         ORDER BY marks DESC LIMIT 1`,
-        {
-          replacements: { cleanId },
-          type: sequelize.QueryTypes.SELECT
-        }
-      );
-
-      if (scoreRows && scoreRows.length > 0 && parseFloat(scoreRows[0].marks) > 0) {
-        return res.json({
-          success: true,
-          student_id: cleanId,
-          marks: parseFloat(scoreRows[0].marks),
-          max_marks: 20
-        });
-      }
-
-      // 2. Check open_source_evidence
-      const allEvidence = await sequelize.query(
-        `SELECT distinct_key_normalized,
-                repo_name,
-                github_username,
-                repo_url,
-                MAX(prs_submitted) as prs_submitted,
-                MAX(prs_merged) as prs_merged,
-                BOOL_OR(is_maintainer) as is_maintainer
-         FROM open_source_evidence
-         WHERE (LOWER(roll_number) = LOWER(:cleanId) OR LOWER(roll_number) IN (
-           SELECT LOWER(roll_number) FROM students WHERE LOWER(register_number) = LOWER(:cleanId)
-         )) AND status = 'VERIFIED'
-         GROUP BY distinct_key_normalized, repo_name, github_username, repo_url`,
-        {
-          replacements: { cleanId },
-          type: sequelize.QueryTypes.SELECT
-        }
-      );
-
-      let uncappedTotal = 0;
-      (allEvidence || []).forEach(e => {
-        const stage = calculateStage(
-          e.prs_submitted || 0,
-          e.prs_merged || 0,
-          false,
-          e.is_maintainer || false,
-          false
-        );
-        uncappedTotal += stage;
-      });
-
-      const finalMarks = Math.min(20, uncappedTotal);
-
-      res.json({
-        success: true,
-        student_id: cleanId,
-        marks: finalMarks,
-        max_marks: 20,
-        uncapped_total: uncappedTotal,
-        repos_count: allEvidence ? allEvidence.length : 0
-      });
-
-    } catch (err) {
-      console.error('[OPEN_SOURCE] Calculate marks error:', err.message);
       next(err);
     }
   }
