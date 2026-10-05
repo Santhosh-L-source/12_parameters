@@ -324,21 +324,22 @@ router.post(
         }
       }
 
-      // Live Bio Token Verification for LeetCode
-      if (platform.trim().toUpperCase() === 'LEETCODE' && verification_token && profile_url) {
-        let verifyLeetCodeFn = null;
+      // Live Bio / Profile Token Verification across ALL platforms
+      if (verification_token && profile_url) {
+        let verifyOwnershipFn = null;
         try {
-          verifyLeetCodeFn = require('../../../services/coding-platform/src/fetchers').verifyLeetCodeOwnership;
+          const fetchers = require('../../../services/coding-platform/src/fetchers');
+          verifyOwnershipFn = fetchers.verifyPlatformOwnership || fetchers.verifyLeetCodeOwnership;
         } catch (_) {}
 
-        if (verifyLeetCodeFn) {
-          const vRes = await verifyLeetCodeFn(profile_url, verification_token);
+        if (verifyOwnershipFn) {
+          const vRes = await verifyOwnershipFn(platform, profile_url, verification_token);
           if (!vRes.verified) {
             return res.status(400).json({
               success: false,
               verified: false,
               error: 'Ownership Verification Failed',
-              message: vRes.reason || `Verification token "${verification_token}" was not found in your LeetCode profile summary/bio.`
+              message: vRes.reason || `Verification token "${verification_token}" was not found on your ${platform} profile bio/name.`
             });
           }
         }
