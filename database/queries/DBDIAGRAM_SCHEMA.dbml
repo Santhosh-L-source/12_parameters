@@ -1,0 +1,415 @@
+// ============================================================================
+// HOPE 12-PARAMETERS READINESS & TRACKER PLATFORM
+// DBDiagram.io Schema Definition (DBML)
+// File: database/queries/DBDIAGRAM_SCHEMA.dbml
+// ============================================================================
+
+Project hope_12_parameters_platform {
+  database_type: 'PostgreSQL'
+  Note: '''
+    # HOPE 12-Parameters Academic & Placement Readiness Platform
+    - Role Hierarchy: Admin (Super) -> Mentor -> Student
+    - Universal Primary/Foreign Key: roll_number
+    - 12 Parameter Evidence Modules with Verification Workflow
+  '''
+}
+
+// ============================================================================
+// 1. USER ROLES & ACCESS HIERARCHY
+// ============================================================================
+
+Table admins {
+  roll_number varchar(50) [pk, note: 'Primary Key e.g. ADM001']
+  name varchar(255) [not null]
+  email varchar(255) [not null, unique]
+  department varchar(100) [default: 'ALL']
+  role varchar(50) [not null, default: 'admin']
+  password_hash text
+  is_active boolean [not null, default: true]
+  created_at timestamptz [default: `now()`]
+  updated_at timestamptz [default: `now()`]
+
+  Note: 'Top-level administrators with global read/write/override access'
+}
+
+Table mentors {
+  roll_number varchar(50) [pk, note: 'Primary Key e.g. MTR101']
+  name varchar(255) [not null]
+  email varchar(255) [not null, unique]
+  department varchar(100) [not null]
+  role varchar(50) [not null, default: 'mentor']
+  admin_roll_number varchar(50) [ref: > admins.roll_number]
+  password_hash text
+  created_at timestamptz [default: `now()`]
+  updated_at timestamptz [default: `now()`]
+
+  Note: 'Departmental mentors overseeing student cohorts and evidence'
+}
+
+Table students {
+  roll_number varchar(50) [pk, note: 'Primary Key e.g. 24CS422']
+  register_number varchar(50) [unique]
+  name varchar(255) [not null]
+  email varchar(255) [unique]
+  department varchar(100) [not null]
+  section varchar(20)
+  batch varchar(20)
+  year_of_study integer
+  mentor_roll_number varchar(50) [ref: > mentors.roll_number]
+  admin_roll_number varchar(50) [ref: > admins.roll_number]
+  role varchar(50) [not null, default: 'student']
+  password_hash text
+  created_at timestamptz [default: `now()`]
+  updated_at timestamptz [default: `now()`]
+
+  Note: 'Core student entity owning submissions across all 12 parameters'
+}
+
+// ============================================================================
+// 2. MASTER PARAMETERS & READINESS THRESHOLDS
+// ============================================================================
+
+Table parameters {
+  id text [pk, note: 'Canonical module ID e.g. coding_problems, gate, etc.']
+  name varchar(150) [not null]
+  max_marks integer [not null, note: 'Sum across 12 parameters = 250 marks']
+  description text
+  created_at timestamptz [default: `now()`]
+
+  Note: 'Catalog of 12 evaluation parameters'
+}
+
+Table level_thresholds {
+  level_name varchar(50) [pk, note: 'Level 1 to Level 5']
+  tier_rank integer [not null, unique]
+  min_marks numeric(5,2) [not null]
+  requires_condition boolean [not null, default: true]
+  description text
+
+  Note: 'Benchmark cutoff criteria for placement readiness'
+}
+
+Table gate_branch_calibration {
+  id integer [pk, increment]
+  branch text [not null]
+  year integer [not null]
+  threshold_score numeric(5,2) [not null]
+  created_at timestamptz [default: `now()`]
+  updated_at timestamptz [default: `now()`]
+
+  indexes {
+    (branch, year) [unique]
+  }
+}
+
+// ============================================================================
+// 3. MASTER PROFILES, SCORES & AUDITING
+// ============================================================================
+
+Table profiles {
+  id uuid [pk, default: `gen_random_uuid()`]
+  roll_number varchar(50) [unique, not null, ref: - students.roll_number]
+  name varchar(255) [not null]
+  department varchar(100)
+  batch varchar(20)
+  section varchar(20)
+  total_score numeric(5,2) [default: 0]
+  coding_score numeric(5,2) [default: 0]
+  level varchar(50) [default: 'NOT_ELIGIBLE']
+  readiness_status varchar(50) [default: 'Developing']
+  created_at timestamptz [default: `now()`]
+  updated_at timestamptz [default: `now()`]
+
+  Note: '1:1 Master aggregated readiness profile per student'
+}
+
+Table scores {
+  id uuid [pk, default: `gen_random_uuid()`]
+  roll_number varchar(50) [not null, ref: > students.roll_number]
+  parameter_id text [not null, ref: > parameters.id]
+  marks numeric(5,2) [not null, default: 0]
+  semester integer [not null, default: 1]
+  provisional boolean [not null, default: false]
+  calculated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (roll_number, parameter_id, semester) [unique]
+  }
+  Note: 'Normalized marks earned per parameter per semester'
+}
+
+Table student_levels {
+  id uuid [pk, default: `gen_random_uuid()`]
+  roll_number varchar(50) [not null, ref: > students.roll_number]
+  semester integer [not null, default: 1]
+  total_marks numeric(5,2) [not null, default: 0]
+  level_name varchar(50) [not null, ref: > level_thresholds.level_name]
+  level_condition_met boolean [not null, default: false]
+  calculated_at timestamptz [default: `now()`]
+
+  indexes {
+    (roll_number, semester) [unique]
+  }
+  Note: 'Semester-wise computed readiness level per student'
+}
+
+Table audit_log {
+  id uuid [pk, default: `gen_random_uuid()`]
+  roll_number varchar(50) [not null, ref: > students.roll_number]
+  actor_roll_number varchar(50) [not null]
+  actor_role varchar(50) [not null]
+  action varchar(100) [not null]
+  parameter_id text [ref: > parameters.id]
+  previous_marks numeric(5,2)
+  new_marks numeric(5,2)
+  reason text
+  metadata jsonb
+  created_at timestamptz [default: `now()`]
+
+  Note: 'Accountability log for evidence verification & mark modifications'
+}
+
+// ============================================================================
+// 4. THE 12 MODULE EVIDENCE TABLES
+// ============================================================================
+
+// 01. Coding Problems
+Table coding_problems_evidence {
+  id uuid [pk, default: `gen_random_uuid()`]
+  roll_number varchar(50) [not null, ref: > students.roll_number]
+  platform varchar(50) [not null, note: 'LEETCODE, CODEFORCES, GFG, CODECHEF, etc.']
+  username varchar(100) [not null]
+  distinct_key varchar(150)
+  distinct_key_normalized varchar(150)
+  total_solved integer [default: 0]
+  sql_solved integer [default: 0]
+  profile_url text
+  fetch_method varchar(50) [default: 'SCRAPER']
+  status varchar(50) [default: 'PENDING', note: 'PENDING, VERIFIED, REJECTED']
+  verified_by_mentor_roll varchar(50) [ref: > mentors.roll_number]
+  submitted_at timestamptz [default: `now()`]
+  verified_at timestamptz
+  last_fetched_at timestamptz
+}
+
+// 02. Competitive Programming Rating
+Table cp_rating_evidence {
+  id uuid [pk, default: `gen_random_uuid()`]
+  roll_number varchar(50) [not null, ref: > students.roll_number]
+  platform varchar(50) [not null]
+  handle varchar(100) [not null]
+  distinct_key varchar(150)
+  distinct_key_normalized varchar(150)
+  current_rating integer [default: 0]
+  max_rating integer [default: 0]
+  profile_url text
+  status varchar(50) [default: 'PENDING']
+  verified_by_mentor_roll varchar(50) [ref: > mentors.roll_number]
+  submitted_at timestamptz [default: `now()`]
+  verified_at timestamptz
+}
+
+// 03. Open Source Contributions
+Table open_source_evidence {
+  id uuid [pk, default: `gen_random_uuid()`]
+  roll_number varchar(50) [not null, ref: > students.roll_number]
+  github_username varchar(100) [not null]
+  repo_name varchar(255)
+  distinct_key varchar(255)
+  distinct_key_normalized varchar(255)
+  prs_submitted integer [default: 0]
+  prs_merged integer [default: 0]
+  is_maintainer boolean [default: false]
+  programme_selected boolean [default: false]
+  programme_completed boolean [default: false]
+  repo_url text
+  evidence_urls text[]
+  fetch_method varchar(50) [default: 'GITHUB_API']
+  status varchar(50) [default: 'PENDING']
+  verified_by_mentor_roll varchar(50) [ref: > mentors.roll_number]
+  submitted_at timestamptz [default: `now()`]
+  verified_at timestamptz
+  last_fetched_at timestamptz
+}
+
+// 04. Monthly Coding Assessment
+Table monthly_coding_evidence {
+  id uuid [pk, default: `gen_random_uuid()`]
+  roll_number varchar(50) [not null, ref: > students.roll_number]
+  contest_name varchar(255) [not null]
+  score numeric(5,2) [default: 0]
+  rank integer
+  percentile numeric(5,2)
+  semester integer [default: 1]
+  status varchar(50) [default: 'VERIFIED']
+  assessed_at timestamptz [default: `now()`]
+}
+
+// 05. 100 Days Training
+Table hundred_days_evidence {
+  id uuid [pk, default: `gen_random_uuid()`]
+  roll_number varchar(50) [not null, ref: > students.roll_number]
+  programme_type varchar(50) [not null, note: 'PEP or HOPE']
+  days_completed integer [default: 0]
+  total_days integer [default: 100]
+  badge_earned varchar(100)
+  status varchar(50) [default: 'VERIFIED']
+  evaluated_by_mentor_roll varchar(50) [ref: > mentors.roll_number]
+  completed_at timestamptz
+}
+
+// 06. GATE Exam
+Table gate_exam_evidence {
+  id uuid [pk, default: `gen_random_uuid()`]
+  roll_number varchar(50) [not null, ref: > students.roll_number]
+  distinct_key varchar(150)
+  distinct_key_normalized varchar(150)
+  exam_type varchar(50) [not null]
+  exam_year integer
+  tests_completed integer [default: 0]
+  full_length_tests integer [default: 0]
+  average_score_percent numeric(5,2)
+  diagnostic_completed boolean [default: false]
+  official_appearance boolean [default: false]
+  qualified boolean [default: false]
+  gate_score numeric(5,2)
+  branch_code varchar(50)
+  is_bonus_exam boolean [default: false]
+  certificate_url text
+  status varchar(50) [default: 'PENDING']
+  verified_by_mentor_roll varchar(50) [ref: > mentors.roll_number]
+  submitted_at timestamptz [default: `now()`]
+  verified_at timestamptz
+}
+
+// 07. Foreign Language
+Table language_evidence {
+  id uuid [pk, default: `gen_random_uuid()`]
+  roll_number varchar(50) [not null, ref: > students.roll_number]
+  distinct_key varchar(150)
+  distinct_key_normalized varchar(150)
+  language varchar(50) [not null]
+  certification_level varchar(50) [not null, note: 'JLPT N5-N1, Goethe A1-B2, etc.']
+  certificate_url text
+  status varchar(50) [default: 'PENDING']
+  verified_by_mentor_roll varchar(50) [ref: > mentors.roll_number]
+  submitted_at timestamptz [default: `now()`]
+  verified_at timestamptz
+}
+
+// 08. Internship & Startup
+Table internship_evidence {
+  id uuid [pk, default: `gen_random_uuid()`]
+  roll_number varchar(50) [not null, ref: > students.roll_number]
+  distinct_key varchar(255)
+  distinct_key_normalized varchar(255)
+  company_name varchar(255) [not null]
+  role varchar(100)
+  duration_months integer [default: 1]
+  monthly_stipend numeric(10,2) [default: 0]
+  is_startup boolean [default: false]
+  offer_letter_url text
+  completion_certificate_url text
+  status varchar(50) [default: 'PENDING']
+  verified_by_mentor_roll varchar(50) [ref: > mentors.roll_number]
+  submitted_at timestamptz [default: `now()`]
+  verified_at timestamptz
+}
+
+// 09. Competitions & Hackathons
+Table competition_evidence {
+  id uuid [pk, default: `gen_random_uuid()`]
+  roll_number varchar(50) [not null, ref: > students.roll_number]
+  distinct_key varchar(255)
+  distinct_key_normalized varchar(255)
+  competition_name varchar(255) [not null]
+  level varchar(50) [note: 'COLLEGE, STATE, NATIONAL, INTERNATIONAL']
+  position varchar(50) [note: '1st, 2nd, 3rd, Finalist, Participant']
+  certificate_url text
+  status varchar(50) [default: 'PENDING']
+  verified_by_mentor_roll varchar(50) [ref: > mentors.roll_number]
+  submitted_at timestamptz [default: `now()`]
+  verified_at timestamptz
+}
+
+// 10. Certificate Achievement
+Table certificate_evidence {
+  id uuid [pk, default: `gen_random_uuid()`]
+  roll_number varchar(50) [not null, ref: > students.roll_number]
+  distinct_key varchar(255)
+  distinct_key_normalized varchar(255)
+  certificate_name varchar(255) [not null]
+  category varchar(50) [not null, note: 'ACADEMIC or INDUSTRY']
+  issuing_body varchar(100)
+  grade_or_score varchar(50)
+  certificate_url text
+  status varchar(50) [default: 'PENDING']
+  verified_by_mentor_roll varchar(50) [ref: > mentors.roll_number]
+  submitted_at timestamptz [default: `now()`]
+  verified_at timestamptz
+}
+
+// 11. Aptitude & Communication
+Table aptitude_communication_evidence {
+  id uuid [pk, default: `gen_random_uuid()`]
+  roll_number varchar(50) [not null, ref: > students.roll_number]
+  quant_score numeric(5,2) [default: 0]
+  logical_score numeric(5,2) [default: 0]
+  verbal_score numeric(5,2) [default: 0]
+  communication_level varchar(50)
+  assessment_date date [default: `CURRENT_DATE`]
+  status varchar(50) [default: 'VERIFIED']
+}
+
+// 12. Project / Publication / Patent
+Table project_evidence {
+  id uuid [pk, default: `gen_random_uuid()`]
+  roll_number varchar(50) [not null, ref: > students.roll_number]
+  distinct_key varchar(255)
+  distinct_key_normalized varchar(255)
+  title varchar(255) [not null]
+  type varchar(50) [not null, note: 'CAPSTONE, PATENT, PUBLICATION']
+  description text
+  github_repo_url text
+  live_demo_url text
+  paper_doi_or_patent_no varchar(100)
+  status varchar(50) [default: 'PENDING']
+  verified_by_mentor_roll varchar(50) [ref: > mentors.roll_number]
+  submitted_at timestamptz [default: `now()`]
+  verified_at timestamptz
+}
+
+// ============================================================================
+// 5. VISUAL TABLE GROUPINGS FOR DBDiagram.io
+// ============================================================================
+
+TableGroup User_Hierarchy {
+  admins
+  mentors
+  students
+}
+
+TableGroup Scoring_Core {
+  parameters
+  level_thresholds
+  profiles
+  scores
+  student_levels
+  audit_log
+  gate_branch_calibration
+}
+
+TableGroup Module_Evidence_12_Parameters {
+  coding_problems_evidence
+  cp_rating_evidence
+  open_source_evidence
+  monthly_coding_evidence
+  hundred_days_evidence
+  gate_exam_evidence
+  language_evidence
+  internship_evidence
+  competition_evidence
+  certificate_evidence
+  aptitude_communication_evidence
+  project_evidence
+}
