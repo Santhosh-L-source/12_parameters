@@ -194,12 +194,12 @@ router.post(
 
       const insertResult = await sequelize.query(
         `INSERT INTO gate_exam_evidence
-         (roll_number, distinct_key, distinct_key_normalized, exam_type, exam_year,
+         (roll_number, distinct_key, exam_type, exam_year,
           tests_completed, full_length_tests, average_score_percent,
           diagnostic_completed, official_appearance, qualified,
           gate_score, branch_code, is_bonus_exam, certificate_url,
           status, submitted_at)
-         VALUES (:canonicalRoll, :distinct_key, :distinct_key_norm, :exam_type, :exam_year,
+         VALUES (:canonicalRoll, :distinct_key, :exam_type, :exam_year,
                  :tests_completed, :full_length_tests, :average_score_percent,
                  :diagnostic_completed, :official_appearance, :qualified,
                  :gate_score, :branch_code, :is_bonus_exam, :certificate_url,
@@ -209,7 +209,6 @@ router.post(
           replacements: {
             canonicalRoll,
             distinct_key,
-            distinct_key_norm,
             exam_type,
             exam_year: exam_year || null,
             tests_completed: tests_completed || 0,
@@ -227,7 +226,9 @@ router.post(
         }
       );
 
-      const evidence = insertResult[0][0];
+      const evidence = insertResult && Array.isArray(insertResult) && insertResult[0] && Array.isArray(insertResult[0]) 
+        ? insertResult[0][0] 
+        : (insertResult && insertResult[0] ? insertResult[0] : {});
 
       res.status(201).json({
         success: true,

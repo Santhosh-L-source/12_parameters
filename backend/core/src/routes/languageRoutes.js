@@ -147,14 +147,13 @@ router.post(
 
       const insertResult = await sequelize.query(
         `INSERT INTO language_evidence
-         (roll_number, distinct_key, distinct_key_normalized, language, certification_level, certificate_url, status, submitted_at)
-         VALUES (:canonicalRoll, :distinctKey, :distinctKeyNorm, :language, :level, :certificateUrl, 'PENDING', NOW())
+         (roll_number, distinct_key, language, certification_level, certificate_url, status, submitted_at)
+         VALUES (:canonicalRoll, :distinctKey, :language, :level, :certificateUrl, 'PENDING', NOW())
          RETURNING id, roll_number, language, certification_level, status, submitted_at`,
         {
           replacements: {
             canonicalRoll,
             distinctKey,
-            distinctKeyNorm,
             language,
             level,
             certificateUrl
@@ -163,7 +162,9 @@ router.post(
         }
       );
 
-      const evidence = insertResult[0][0];
+      const evidence = insertResult && Array.isArray(insertResult) && insertResult[0] && Array.isArray(insertResult[0]) 
+        ? insertResult[0][0] 
+        : (insertResult && insertResult[0] ? insertResult[0] : {});
 
       res.status(201).json({
         success: true,

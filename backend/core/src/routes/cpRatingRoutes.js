@@ -150,7 +150,6 @@ router.post(
           `UPDATE cp_rating_evidence
            SET handle = :handle,
                distinct_key = :distinct_key,
-               distinct_key_normalized = :distinct_key_norm,
                current_rating = :currentRating,
                max_rating = :maxRating,
                profile_url = COALESCE(:profileUrl, profile_url),
@@ -162,7 +161,6 @@ router.post(
               id: existing[0].id,
               handle,
               distinct_key,
-              distinct_key_norm,
               currentRating,
               maxRating,
               profileUrl
@@ -174,8 +172,8 @@ router.post(
       } else {
         const insertResult = await sequelize.query(
           `INSERT INTO cp_rating_evidence
-           (roll_number, platform, handle, distinct_key, distinct_key_normalized, current_rating, max_rating, profile_url, status, submitted_at, verified_at)
-           VALUES (:canonicalRoll, :platform, :handle, :distinct_key, :distinct_key_norm, :currentRating, :maxRating, :profileUrl, 'VERIFIED', NOW(), NOW())
+           (roll_number, platform, handle, distinct_key, current_rating, max_rating, profile_url, status, submitted_at, verified_at)
+           VALUES (:canonicalRoll, :platform, :handle, :distinct_key, :currentRating, :maxRating, :profileUrl, 'VERIFIED', NOW(), NOW())
            RETURNING id, roll_number, platform, handle, current_rating, max_rating, status, submitted_at`,
           {
             replacements: {
@@ -183,7 +181,6 @@ router.post(
               platform,
               handle,
               distinct_key,
-              distinct_key_norm,
               currentRating,
               maxRating,
               profileUrl
@@ -191,7 +188,9 @@ router.post(
             type: sequelize.QueryTypes.INSERT
           }
         );
-        evidence = insertResult[0][0];
+        evidence = insertResult && Array.isArray(insertResult) && insertResult[0] && Array.isArray(insertResult[0]) 
+          ? insertResult[0][0] 
+          : (insertResult && insertResult[0] ? insertResult[0] : {});
       }
 
       // Recalculate single best marks across verified platforms

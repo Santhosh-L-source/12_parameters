@@ -134,7 +134,6 @@ router.post(
            SET github_username = :githubUsername,
                repo_name = :repoName,
                distinct_key = :distinct_key,
-               distinct_key_normalized = :distinct_key_norm,
                prs_submitted = :prsSubmitted,
                prs_merged = :prsMerged,
                is_maintainer = :isMaintainer,
@@ -151,7 +150,6 @@ router.post(
               githubUsername,
               repoName,
               distinct_key,
-              distinct_key_norm,
               prsSubmitted,
               prsMerged,
               isMaintainer,
@@ -166,10 +164,10 @@ router.post(
       } else {
         const insertResult = await sequelize.query(
           `INSERT INTO open_source_evidence
-           (roll_number, github_username, repo_name, distinct_key, distinct_key_normalized,
+           (roll_number, github_username, repo_name, distinct_key,
             prs_submitted, prs_merged, is_maintainer, programme_selected, programme_completed,
             repo_url, fetch_method, status, submitted_at, verified_at, last_fetched_at)
-           VALUES (:canonicalRoll, :githubUsername, :repoName, :distinct_key, :distinct_key_norm,
+           VALUES (:canonicalRoll, :githubUsername, :repoName, :distinct_key,
                    :prsSubmitted, :prsMerged, :isMaintainer, :programmeSelected, :programmeCompleted,
                    :repoUrl, 'GITHUB_API', 'VERIFIED', NOW(), NOW(), NOW())
            RETURNING id, roll_number, github_username, repo_name, prs_submitted, prs_merged, status, submitted_at`,
@@ -179,7 +177,6 @@ router.post(
               githubUsername,
               repoName,
               distinct_key,
-              distinct_key_norm,
               prsSubmitted,
               prsMerged,
               isMaintainer,
@@ -190,7 +187,9 @@ router.post(
             type: sequelize.QueryTypes.INSERT
           }
         );
-        evidence = insertResult[0][0];
+        evidence = insertResult && Array.isArray(insertResult) && insertResult[0] && Array.isArray(insertResult[0]) 
+          ? insertResult[0][0] 
+          : (insertResult && insertResult[0] ? insertResult[0] : {});
       }
 
       // Recalculate marks

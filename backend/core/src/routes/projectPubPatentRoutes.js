@@ -112,16 +112,15 @@ const handleSubmit = async (req, res, next) => {
 
     const insertResult = await sequelize.query(
       `INSERT INTO project_evidence
-       (roll_number, distinct_key, distinct_key_normalized, title, type, description,
+       (roll_number, distinct_key, title, type, description,
         github_repo_url, live_demo_url, paper_doi_or_patent_no, status, submitted_at)
-       VALUES (:canonicalRoll, :distinctKey, :distinctKeyNorm, :title, :type, :description,
+       VALUES (:canonicalRoll, :distinctKey, :title, :type, :description,
                :githubRepoUrl, :liveDemoUrl, :paperDoi, 'PENDING', NOW())
        RETURNING id, roll_number, title, type, status, submitted_at`,
       {
         replacements: {
           canonicalRoll,
           distinctKey,
-          distinctKeyNorm,
           title,
           type,
           description,
@@ -133,7 +132,9 @@ const handleSubmit = async (req, res, next) => {
       }
     );
 
-    const evidence = insertResult[0][0];
+    const evidence = insertResult && Array.isArray(insertResult) && insertResult[0] && Array.isArray(insertResult[0]) 
+      ? insertResult[0][0] 
+      : (insertResult && insertResult[0] ? insertResult[0] : {});
 
     res.status(201).json({
       success: true,

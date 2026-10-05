@@ -145,16 +145,15 @@ router.post(
 
       const insertResult = await sequelize.query(
         `INSERT INTO certificate_evidence
-         (roll_number, distinct_key, distinct_key_normalized, certificate_name, category,
+         (roll_number, distinct_key, certificate_name, category,
           issuing_body, grade_or_score, certificate_url, status, submitted_at)
-         VALUES (:canonicalRoll, :distinctKey, :distinctKeyNorm, :certName, :category,
+         VALUES (:canonicalRoll, :distinctKey, :certName, :category,
                  :issuingBody, :gradeOrScore, :certificateUrl, 'PENDING', NOW())
          RETURNING id, roll_number, certificate_name, category, grade_or_score, status, submitted_at`,
         {
           replacements: {
             canonicalRoll,
             distinctKey,
-            distinctKeyNorm,
             certName,
             category,
             issuingBody,
@@ -165,7 +164,9 @@ router.post(
         }
       );
 
-      const evidence = insertResult[0][0];
+      const evidence = insertResult && Array.isArray(insertResult) && insertResult[0] && Array.isArray(insertResult[0]) 
+        ? insertResult[0][0] 
+        : (insertResult && insertResult[0] ? insertResult[0] : {});
 
       res.status(201).json({
         success: true,

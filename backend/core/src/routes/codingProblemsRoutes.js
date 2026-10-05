@@ -185,7 +185,6 @@ router.post(
                profile_url = COALESCE(:profile_url, profile_url),
                username = :username,
                distinct_key = :distinct_key,
-               distinct_key_normalized = :distinct_key_norm,
                status = 'VERIFIED',
                verified_at = NOW(),
                last_fetched_at = NOW()
@@ -197,8 +196,7 @@ router.post(
               sql_solved: resSql,
               profile_url: profile_url || null,
               username: username.trim(),
-              distinct_key,
-              distinct_key_norm
+              distinct_key
             },
             type: sequelize.QueryTypes.UPDATE
           }
@@ -207,9 +205,9 @@ router.post(
       } else {
         const insertResult = await sequelize.query(
           `INSERT INTO coding_problems_evidence
-           (roll_number, platform, username, distinct_key, distinct_key_normalized,
+           (roll_number, platform, username, distinct_key,
             total_solved, sql_solved, profile_url, fetch_method, status, submitted_at, verified_at, last_fetched_at)
-           VALUES (:canonicalRoll, :platUpper, :username, :distinct_key, :distinct_key_norm,
+           VALUES (:canonicalRoll, :platUpper, :username, :distinct_key,
                    :finalTotal, :finalSql, :profile_url, :fetch_method, 'VERIFIED', NOW(), NOW(), NOW())
            RETURNING id, roll_number, platform, username, total_solved, sql_solved, status, submitted_at`,
           {
@@ -218,7 +216,6 @@ router.post(
               platUpper,
               username: username.trim(),
               distinct_key,
-              distinct_key_norm,
               finalTotal,
               finalSql,
               profile_url: profile_url || null,
@@ -227,7 +224,9 @@ router.post(
             type: sequelize.QueryTypes.INSERT
           }
         );
-        evidence = insertResult[0][0];
+        evidence = insertResult && Array.isArray(insertResult) && insertResult[0] && Array.isArray(insertResult[0]) 
+          ? insertResult[0][0] 
+          : (insertResult && insertResult[0] ? insertResult[0] : {});
       }
 
       // Automatically recalculate marks across all verified platforms
