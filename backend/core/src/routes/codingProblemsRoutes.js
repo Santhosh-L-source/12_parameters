@@ -122,6 +122,35 @@ router.post(
       // distinct_key = platform + username
       const distinct_key = `${platform.trim()}:${username.trim()}`;
 
+      // Prevent impersonation: Check if another student has already claimed this profile URL or username
+      const claimedByOther = await sequelize.query(
+        `SELECT student_id, status FROM coding_problems_evidence
+         WHERE LOWER(TRIM(student_id)) != LOWER(TRIM(:studentId))
+           AND platform = :platform
+           AND (
+             (profile_url IS NOT NULL AND LOWER(TRIM(profile_url)) = LOWER(TRIM(:profile_url)))
+             OR LOWER(TRIM(username)) = LOWER(TRIM(:username))
+           )
+         LIMIT 1`,
+        {
+          replacements: {
+            studentId,
+            platform: platform.trim().toUpperCase(),
+            profile_url: profile_url || '',
+            username: username.trim()
+          },
+          type: sequelize.QueryTypes.SELECT
+        }
+      );
+
+      if (claimedByOther.length > 0) {
+        return res.status(409).json({
+          success: false,
+          error: 'Profile already claimed',
+          message: `This ${platform} profile is already linked to another student (${claimedByOther[0].student_id}). You cannot claim someone else's profile.`
+        });
+      }
+
       // Check if platform already exists for student
       const existing = await sequelize.query(
         `SELECT id, total_solved, sql_solved, status FROM coding_problems_evidence
@@ -265,6 +294,34 @@ router.post(
 
       if (!platform) {
         return res.status(400).json({ success: false, error: 'Platform is required' });
+      }
+
+      // Prevent impersonation: Check if another student has already claimed this profile URL
+      if (profile_url) {
+        const claimedByOther = await sequelize.query(
+          `SELECT student_id FROM coding_problems_evidence
+           WHERE LOWER(TRIM(student_id)) != LOWER(TRIM(:studentId))
+             AND platform = :platform
+             AND profile_url IS NOT NULL
+             AND LOWER(TRIM(profile_url)) = LOWER(TRIM(:profile_url))
+           LIMIT 1`,
+          {
+            replacements: {
+              studentId,
+              platform: platform.trim().toUpperCase(),
+              profile_url: profile_url.trim()
+            },
+            type: sequelize.QueryTypes.SELECT
+          }
+        );
+
+        if (claimedByOther.length > 0) {
+          return res.status(409).json({
+            success: false,
+            error: 'Profile already claimed',
+            message: `This ${platform} profile is already linked to another student (${claimedByOther[0].student_id}). You cannot claim someone else's profile.`
+          });
+        }
       }
 
       // Auto-fetch fresh stats
