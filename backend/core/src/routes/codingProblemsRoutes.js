@@ -290,7 +290,7 @@ router.post(
   async (req, res, next) => {
     try {
       const studentId = req.user.roll_number;
-      const { platform, profile_url } = req.body;
+      const { platform, profile_url, verification_token } = req.body;
 
       if (!platform) {
         return res.status(400).json({ success: false, error: 'Platform is required' });
@@ -321,6 +321,26 @@ router.post(
             error: 'Profile already claimed',
             message: `This ${platform} profile is already linked to another student (${claimedByOther[0].student_id}). You cannot claim someone else's profile.`
           });
+        }
+      }
+
+      // Live Bio Token Verification for LeetCode
+      if (platform.trim().toUpperCase() === 'LEETCODE' && verification_token && profile_url) {
+        let verifyLeetCodeFn = null;
+        try {
+          verifyLeetCodeFn = require('../../../services/coding-platform/src/fetchers').verifyLeetCodeOwnership;
+        } catch (_) {}
+
+        if (verifyLeetCodeFn) {
+          const vRes = await verifyLeetCodeFn(profile_url, verification_token);
+          if (!vRes.verified) {
+            return res.status(400).json({
+              success: false,
+              verified: false,
+              error: 'Ownership Verification Failed',
+              message: vRes.reason || `Verification token "${verification_token}" was not found in your LeetCode profile summary/bio.`
+            });
+          }
         }
       }
 

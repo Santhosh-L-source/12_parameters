@@ -167,6 +167,7 @@ const CodingProblems = () => {
       const res = await moduleAPI.verifyCodingProblemsOwnership({
         platform: activeModalPlatform.value,
         profile_url: urls[activeModalPlatform.value] || null,
+        verification_token: verifyToken,
       });
       setModalStep(3);
       showAlert(`Ownership verified for ${activeModalPlatform.label}!`, 'success');

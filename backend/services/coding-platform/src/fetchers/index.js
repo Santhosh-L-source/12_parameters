@@ -1,4 +1,4 @@
-const { fetchLeetCode } = require('./leetcodeFetcher');
+const { fetchLeetCode, verifyLeetCodeOwnership } = require('./leetcodeFetcher');
 const { fetchCodeforces } = require('./codeforcesFetcher');
 const { fetchAtCoder } = require('./atcoderFetcher');
 const { fetchCodeChef } = require('./codechefFetcher');
@@ -29,4 +29,5 @@ function getFetcher(platform) {
   return (profileUrl) => breaker.fire(profileUrl);
 }
 
-module.exports = { getFetcher, fetcherMap };
+module.exports = { getFetcher, fetcherMap, verifyLeetCodeOwnership };
+
