@@ -53,35 +53,6 @@ const Header = () => {
       </div>
 
       <div className={`header-right ${mobileMenuOpen ? 'mobile-open' : ''}`}>
-        {/* Strictly Role-Restricted Navigation */}
-        {role === 'student' && (
-          <a
-            href="#"
-            onClick={(e) => {
-              e.preventDefault();
-              navigateTo('/dashboard');
-            }}
-            className={`nav-link ${isStudentDash ? 'active' : ''}`}
-          >
-            🎓 Student Portal
-          </a>
-        )}
-
-        {role === 'mentor' && (
-          <a
-            href="#"
-            onClick={(e) => {
-              e.preventDefault();
-              navigateTo('/mentor');
-            }}
-            className={`nav-link ${isMentorDash ? 'active' : ''}`}
-          >
-            👨‍🏫 Mentor Portal
-          </a>
-        )}
-
-
-
         {user && (
           <div className="user-badge-header">
             <span className="user-name" title={user.name || user.id_number}>
