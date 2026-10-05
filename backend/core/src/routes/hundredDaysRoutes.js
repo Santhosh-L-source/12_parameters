@@ -2,8 +2,8 @@
  * Hundred Days Training Routes
  *
  * Module: 100 Days Training (15 marks)
- * Scoring: PEP=5, HOPE_NON_ELITE=10, HOPE_ELITE=15
- * One-time lookup - single record per student
+ * Scoring: PEP = 5 marks, HOPE_NON_ELITE (HOPE) = 10 marks, HOPE_ELITE = 15 marks, NOT_SELECTED = 0 marks
+ * Verification: Mentor verification & direct cohort grading matrix
  */
 
 const express = require('express');
@@ -35,15 +35,55 @@ function validate(req, res, next) {
 }
 
 /**
+ * Helper to resolve canonical roll_number for a student ID or register number
+ */
+async function resolveStudentRoll(idOrReg) {
+  if (!idOrReg) return null;
+  const cleanId = String(idOrReg).trim();
+  const rows = await sequelize.query(
+    `SELECT roll_number, register_number, name, department 
+     FROM students 
+     WHERE LOWER(roll_number) = LOWER(:cleanId) 
+        OR (register_number IS NOT NULL AND LOWER(register_number) = LOWER(:cleanId))
+     LIMIT 1`,
+    {
+      replacements: { cleanId },
+      type: sequelize.QueryTypes.SELECT
+    }
+  );
+  if (rows && rows.length > 0) {
+    return rows[0].roll_number;
+  }
+  return cleanId;
+}
+
+/**
+ * Helper to update profile readiness scores after marks change
+ */
+async function updateStudentProfileScore(rollNumber) {
+  try {
+    await sequelize.query(
+      `UPDATE profiles
+       SET total_score = (
+         SELECT COALESCE(SUM(marks), 0) 
+         FROM scores 
+         WHERE LOWER(roll_number) = LOWER(:rollNumber)
+       ),
+       updated_at = NOW()
+       WHERE LOWER(roll_number) = LOWER(:rollNumber)`,
+      {
+        replacements: { rollNumber },
+        type: sequelize.QueryTypes.UPDATE
+      }
+    );
+  } catch (err) {
+    console.warn('[HUNDRED_DAYS] Failed to update profile total_score:', err.message);
+  }
+}
+
+/**
  * POST /api/hundred-days/submit
- * Submit 100 Days Training evidence
- *
- * Body:
- * {
- *   "training_program": "HOPE_ELITE",
- *   "selection_year": 2024,
- *   "selection_letter_url": "https://..."
- * }
+ * Student submits 100 Days Training evidence
  */
 router.post(
   '/submit',
@@ -54,67 +94,69 @@ router.post(
       .withMessage(`training_program must be one of: ${TRAINING_PROGRAMS.join(', ')}`),
     body('selection_year')
       .optional()
-      .isInt({ min: 2020, max: 2030 })
-      .withMessage('selection_year must be between 2020-2030'),
+      .isInt({ min: 2020, max: 2030 }),
     body('selection_letter_url')
       .optional()
-      .isURL()
-      .withMessage('selection_letter_url must be a valid URL'),
+      .isString()
   ],
   validate,
   async (req, res, next) => {
     try {
-      const studentId = req.user.roll_number;
+      const studentRoll = req.user.roll_number || req.user.id_number;
       const { training_program, selection_year, selection_letter_url } = req.body;
 
-      // Check if student already has a submission
+      const canonicalRoll = await resolveStudentRoll(studentRoll);
+
       const existing = await sequelize.query(
-        `SELECT id, status FROM hundred_days_evidence WHERE student_id = :studentId`,
+        `SELECT id, status FROM hundred_days_evidence WHERE LOWER(roll_number) = LOWER(:canonicalRoll)`,
         {
-          replacements: { studentId },
+          replacements: { canonicalRoll },
           type: sequelize.QueryTypes.SELECT
         }
       );
 
       if (existing.length > 0) {
-        return res.status(409).json({
-          success: false,
-          error: 'Duplicate submission',
-          message: 'You have already submitted 100 Days Training evidence. Only one submission allowed per student.'
+        await sequelize.query(
+          `UPDATE hundred_days_evidence
+           SET programme_type = :training_program,
+               status = 'PENDING',
+               completed_at = NOW()
+           WHERE id = :id`,
+          {
+            replacements: {
+              id: existing[0].id,
+              training_program
+            },
+            type: sequelize.QueryTypes.UPDATE
+          }
+        );
+
+        return res.json({
+          success: true,
+          message: 'Evidence updated successfully and submitted for mentor review',
+          evidence_id: existing[0].id
         });
       }
 
-      // Insert new evidence
-      const result = await sequelize.query(
+      const insertResult = await sequelize.query(
         `INSERT INTO hundred_days_evidence
-         (student_id, training_program, selection_year, selection_letter_url, status, verification_source, submitted_at)
-         VALUES (:studentId, :training_program, :selection_year, :selection_letter_url, 'PENDING', 'MENTOR_MANUAL', NOW())
-         RETURNING *`,
+         (roll_number, programme_type, days_completed, total_days, badge_earned, status, completed_at)
+         VALUES (:canonicalRoll, :training_program, 100, 100, true, 'PENDING', NOW())
+         RETURNING id, roll_number, programme_type, status, completed_at`,
         {
           replacements: {
-            studentId,
-            training_program,
-            selection_year: selection_year || null,
-            selection_letter_url: selection_letter_url || null
+            canonicalRoll,
+            training_program
           },
           type: sequelize.QueryTypes.INSERT
         }
       );
 
-      const evidence = result[0][0];
-
       res.status(201).json({
         success: true,
         message: 'Evidence submitted successfully',
-        evidence: {
-          id: evidence.id,
-          training_program: evidence.training_program,
-          selection_year: evidence.selection_year,
-          status: evidence.status,
-          submitted_at: evidence.submitted_at
-        }
+        evidence: insertResult[0][0]
       });
-
     } catch (err) {
       console.error('[HUNDRED_DAYS] Submit error:', err.message);
       next(err);
@@ -134,9 +176,11 @@ router.get(
   async (req, res, next) => {
     try {
       const { studentId } = req.params;
+      const canonicalRoll = await resolveStudentRoll(studentId);
 
-      // Check if requesting own data or if mentor/admin
-      if (req.user.roll_number !== studentId && req.user.role !== 'mentor' && req.user.role !== 'admin') {
+      // Check authorization
+      const reqRoll = req.user.roll_number || req.user.id_number;
+      if (req.user.role !== 'mentor' && req.user.role !== 'admin' && reqRoll.toLowerCase() !== studentId.toLowerCase() && reqRoll.toLowerCase() !== canonicalRoll.toLowerCase()) {
         return res.status(403).json({
           success: false,
           error: 'Forbidden',
@@ -147,20 +191,19 @@ router.get(
       const evidence = await sequelize.query(
         `SELECT
           id,
-          student_id,
-          training_program,
-          selection_year,
-          selection_letter_url,
+          roll_number as student_id,
+          programme_type as training_program,
+          days_completed,
+          total_days,
+          badge_earned,
           status,
-          mentor_id,
-          verified_at,
-          verification_source,
-          rejection_reason,
-          submitted_at
+          evaluated_by_mentor_roll as mentor_id,
+          completed_at as verified_at,
+          completed_at as submitted_at
          FROM hundred_days_evidence
-         WHERE student_id = :studentId`,
+         WHERE LOWER(roll_number) = LOWER(:canonicalRoll)`,
         {
-          replacements: { studentId },
+          replacements: { canonicalRoll },
           type: sequelize.QueryTypes.SELECT
         }
       );
@@ -169,7 +212,6 @@ router.get(
         success: true,
         evidence: evidence.length > 0 ? evidence[0] : null
       });
-
     } catch (err) {
       console.error('[HUNDRED_DAYS] Get evidence error:', err.message);
       next(err);
@@ -186,39 +228,46 @@ router.get(
   authenticate,
   async (req, res, next) => {
     try {
-      // Require mentor or admin role
       if (req.user.role !== 'mentor' && req.user.role !== 'admin') {
         return res.status(403).json({
           success: false,
           error: 'Forbidden',
-          message: 'Only mentors can access this endpoint'
+          message: 'Only mentors and administrators can access pending queue'
         });
       }
 
-      // Scope to mentor's department (admins see all)
+      const mentorDept = req.user.department;
+      const mentorRole = req.user.role;
+      const mentorRoll = req.user.roll_number || req.user.id_number;
+
       const evidence = await sequelize.query(
         `SELECT
           e.id,
-          e.student_id,
-          e.training_program,
-          e.selection_year,
-          e.selection_letter_url,
+          e.roll_number as student_id,
+          e.programme_type as training_program,
+          e.days_completed,
+          e.total_days,
+          e.badge_earned,
           e.status,
-          e.submitted_at,
-          p.name as student_name,
-          p.department
+          e.completed_at as submitted_at,
+          s.name as student_name,
+          s.department,
+          s.register_number
          FROM hundred_days_evidence e
-         JOIN profiles p ON e.student_id = p.id_number
+         JOIN students s ON LOWER(e.roll_number) = LOWER(s.roll_number)
          WHERE e.status = 'PENDING'
            AND (
              :mentorRole = 'admin'
-             OR p.department = :mentorDepartment
+             OR :mentorDept = 'ALL'
+             OR s.mentor_roll_number = :mentorRoll
+             OR (s.mentor_roll_number IS NULL AND s.department = :mentorDept)
            )
-         ORDER BY e.submitted_at ASC`,
+         ORDER BY e.completed_at ASC`,
         {
           replacements: {
-            mentorRole: req.user.role,
-            mentorDepartment: req.user.department
+            mentorRole,
+            mentorDept,
+            mentorRoll
           },
           type: sequelize.QueryTypes.SELECT
         }
@@ -229,7 +278,6 @@ router.get(
         evidence: evidence || [],
         count: evidence?.length || 0
       });
-
     } catch (err) {
       console.error('[HUNDRED_DAYS] Get pending error:', err.message);
       next(err);
@@ -239,13 +287,7 @@ router.get(
 
 /**
  * POST /api/hundred-days/:id/verify
- * Mentor verifies evidence
- *
- * Body:
- * {
- *   "action": "VERIFIED" | "REJECTED",
- *   "rejection_reason": "..." (required if REJECTED)
- * }
+ * Mentor verifies student evidence
  */
 router.post(
   '/:id/verify',
@@ -263,15 +305,20 @@ router.post(
   validate,
   async (req, res, next) => {
     try {
-      // TODO: Add role check - only mentors can verify
-      // For now, allowing authenticated users
+      if (req.user.role !== 'mentor' && req.user.role !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          error: 'Forbidden',
+          message: 'Only mentors and administrators can verify evidence'
+        });
+      }
 
       const { id } = req.params;
-      const { action, rejection_reason } = req.body;
+      const { action } = req.body;
+      const mentorRoll = req.user.roll_number || req.user.id_number || 'MENTOR';
 
-      // Get evidence
       const evidence = await sequelize.query(
-        `SELECT student_id, status, training_program FROM hundred_days_evidence WHERE id = :id`,
+        `SELECT roll_number, status, programme_type FROM hundred_days_evidence WHERE id = :id`,
         {
           replacements: { id },
           type: sequelize.QueryTypes.SELECT
@@ -282,70 +329,54 @@ router.post(
         return res.status(404).json({
           success: false,
           error: 'Not found',
-          message: 'Evidence not found'
+          message: 'Evidence record not found'
         });
       }
 
-      if (evidence[0].status !== 'PENDING') {
-        return res.status(400).json({
-          success: false,
-          error: 'Invalid status',
-          message: `Evidence is already ${evidence[0].status}`
-        });
-      }
+      const studentRoll = evidence[0].roll_number;
+      const progType = evidence[0].programme_type || 'NOT_SELECTED';
+      const marks = action === 'VERIFIED' ? (PROGRAM_MARKS[progType] || 0) : 0;
 
-      // Update status
       await sequelize.query(
         `UPDATE hundred_days_evidence
          SET status = :status,
-             mentor_id = :mentorId,
-             verified_at = NOW(),
-             rejection_reason = :rejectionReason
+             evaluated_by_mentor_roll = :mentorRoll,
+             completed_at = NOW()
          WHERE id = :id`,
         {
           replacements: {
             id,
             status: action,
-            mentorId: null, // TODO: Use actual mentor ID from req.user
-            rejectionReason: action === 'REJECTED' ? rejection_reason : null
+            mentorRoll
           },
           type: sequelize.QueryTypes.UPDATE
         }
       );
 
-      // If verified, calculate and update scores
       if (action === 'VERIFIED') {
-        const marks = PROGRAM_MARKS[evidence[0].training_program] || 0;
-
-        // Delete existing score first
         await sequelize.query(
-          `DELETE FROM scores WHERE register_number = :studentId AND parameter = 'hundred_days'`,
-          {
-            replacements: { studentId: evidence[0].student_id },
-            type: sequelize.QueryTypes.DELETE
-          }
-        );
-
-        // Insert new score (use semester = 1 for non-semester-specific parameters)
-        await sequelize.query(
-          `INSERT INTO scores (register_number, parameter, marks, semester, provisional, calculated_at)
-           VALUES (:studentId, 'hundred_days', :marks, 1, false, NOW())`,
+          `INSERT INTO scores (roll_number, parameter_id, marks, semester, provisional, calculated_at)
+           VALUES (:studentRoll, 'hundred_days', :marks, 1, false, NOW())
+           ON CONFLICT (roll_number, parameter_id, semester)
+           DO UPDATE SET marks = EXCLUDED.marks, provisional = false, calculated_at = NOW()`,
           {
             replacements: {
-              studentId: evidence[0].student_id,
+              studentRoll,
               marks
             },
             type: sequelize.QueryTypes.INSERT
           }
         );
+
+        await updateStudentProfileScore(studentRoll);
       }
 
       res.json({
         success: true,
         message: `Evidence ${action.toLowerCase()} successfully`,
-        action
+        action,
+        marks
       });
-
     } catch (err) {
       console.error('[HUNDRED_DAYS] Verify error:', err.message);
       next(err);
@@ -365,26 +396,24 @@ router.get(
   async (req, res, next) => {
     try {
       const { studentId } = req.params;
-      const cleanId = String(studentId).trim();
+      const canonicalRoll = await resolveStudentRoll(studentId);
 
       // 1. Check scores table first
       const scoreRows = await sequelize.query(
         `SELECT marks FROM scores 
-         WHERE (LOWER(roll_number) = LOWER(:cleanId) OR LOWER(roll_number) IN (
-           SELECT LOWER(roll_number) FROM students WHERE LOWER(register_number) = LOWER(:cleanId)
-         ))
-         AND parameter_id IN ('hundred_days', '100_days')
+         WHERE LOWER(roll_number) = LOWER(:canonicalRoll)
+           AND parameter_id IN ('hundred_days', '100_days', '100_days_coding')
          ORDER BY marks DESC LIMIT 1`,
         {
-          replacements: { cleanId },
+          replacements: { canonicalRoll },
           type: sequelize.QueryTypes.SELECT
         }
       );
 
-      if (scoreRows && scoreRows.length > 0 && parseFloat(scoreRows[0].marks) > 0) {
+      if (scoreRows && scoreRows.length > 0 && parseFloat(scoreRows[0].marks) >= 0) {
         return res.json({
           success: true,
-          student_id: cleanId,
+          student_id: canonicalRoll,
           marks: parseFloat(scoreRows[0].marks),
           max_marks: 15
         });
@@ -394,30 +423,30 @@ router.get(
       const evidence = await sequelize.query(
         `SELECT programme_type, status
          FROM hundred_days_evidence
-         WHERE (LOWER(roll_number) = LOWER(:cleanId) OR LOWER(roll_number) IN (
-           SELECT LOWER(roll_number) FROM students WHERE LOWER(register_number) = LOWER(:cleanId)
-         )) AND status = 'VERIFIED'
+         WHERE LOWER(roll_number) = LOWER(:canonicalRoll)
          LIMIT 1`,
         {
-          replacements: { cleanId },
+          replacements: { canonicalRoll },
           type: sequelize.QueryTypes.SELECT
         }
       );
 
       let marks = 0;
+      let prog = null;
       if (evidence && evidence.length > 0) {
-        const prog = evidence[0].programme_type;
-        marks = prog === 'HOPE_ELITE' ? 15 : (prog === 'HOPE_NON_ELITE' ? 10 : (prog === 'PEP' ? 5 : 0));
+        prog = evidence[0].programme_type;
+        if (evidence[0].status === 'VERIFIED') {
+          marks = PROGRAM_MARKS[prog] || 0;
+        }
       }
 
       res.json({
         success: true,
-        student_id: cleanId,
+        student_id: canonicalRoll,
         marks,
         max_marks: 15,
-        program: evidence && evidence.length > 0 ? evidence[0].programme_type : null
+        program: prog
       });
-
     } catch (err) {
       console.error('[HUNDRED_DAYS] Calculate marks error:', err.message);
       next(err);
@@ -427,7 +456,7 @@ router.get(
 
 /**
  * POST /api/hundred-days/evaluate
- * Mentor/Admin directly evaluates and allots marks for a student's 100 Days Training
+ * Mentor/Admin directly evaluates and allots marks for a single student
  */
 router.post(
   '/evaluate',
@@ -449,33 +478,34 @@ router.post(
         });
       }
 
-      const { student_id, training_program, selection_year } = req.body;
-      const cleanId = String(student_id).trim();
+      const { student_id, training_program } = req.body;
+      const canonicalRoll = await resolveStudentRoll(student_id);
       const marks = PROGRAM_MARKS[training_program] || 0;
-      const mentorId = req.user.id_number || req.user.roll_number || 'MENTOR';
+      const mentorRoll = req.user.roll_number || req.user.id_number || 'MENTOR';
 
       // 1. Upsert into hundred_days_evidence
       const existing = await sequelize.query(
-        `SELECT id FROM hundred_days_evidence WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(:cleanId))`,
-        { replacements: { cleanId }, type: sequelize.QueryTypes.SELECT }
+        `SELECT id FROM hundred_days_evidence WHERE LOWER(roll_number) = LOWER(:canonicalRoll)`,
+        { replacements: { canonicalRoll }, type: sequelize.QueryTypes.SELECT }
       );
 
       if (existing.length > 0) {
         await sequelize.query(
           `UPDATE hundred_days_evidence
-           SET training_program = :training_program,
-               selection_year = :selection_year,
-               status = 'VERIFIED',
-               mentor_id = :mentorId,
-               verified_at = NOW(),
-               verification_source = 'MENTOR_MANUAL'
+           SET programme_type = :training_program,
+               days_completed = CASE WHEN :marks > 0 THEN 100 ELSE 0 END,
+               total_days = 100,
+               badge_earned = (:marks > 0),
+               status = CASE WHEN :marks > 0 THEN 'VERIFIED' ELSE 'NOT_SELECTED' END,
+               evaluated_by_mentor_roll = :mentorRoll,
+               completed_at = NOW()
            WHERE id = :id`,
           {
             replacements: {
               id: existing[0].id,
               training_program,
-              selection_year: selection_year || new Date().getFullYear(),
-              mentorId
+              marks,
+              mentorRoll
             },
             type: sequelize.QueryTypes.UPDATE
           }
@@ -483,65 +513,37 @@ router.post(
       } else {
         await sequelize.query(
           `INSERT INTO hundred_days_evidence
-           (student_id, training_program, selection_year, status, mentor_id, verified_at, verification_source, submitted_at)
-           VALUES (:cleanId, :training_program, :selection_year, 'VERIFIED', :mentorId, NOW(), 'MENTOR_MANUAL', NOW())
-           ON CONFLICT (student_id) DO UPDATE
-           SET training_program = EXCLUDED.training_program,
-               status = 'VERIFIED',
-               mentor_id = EXCLUDED.mentor_id,
-               verified_at = NOW(),
-               verification_source = 'MENTOR_MANUAL'`,
+           (roll_number, programme_type, days_completed, total_days, badge_earned, status, evaluated_by_mentor_roll, completed_at)
+           VALUES (:canonicalRoll, :training_program, CASE WHEN :marks > 0 THEN 100 ELSE 0 END, 100, (:marks > 0), CASE WHEN :marks > 0 THEN 'VERIFIED' ELSE 'NOT_SELECTED' END, :mentorRoll, NOW())`,
           {
             replacements: {
-              cleanId,
+              canonicalRoll,
               training_program,
-              selection_year: selection_year || new Date().getFullYear(),
-              mentorId
+              marks,
+              mentorRoll
             },
             type: sequelize.QueryTypes.INSERT
           }
         );
       }
 
-      // 2. Update/upsert master scores record
-      const existingScore = await sequelize.query(
-        `SELECT id FROM scores WHERE LOWER(TRIM(register_number)) = LOWER(TRIM(:cleanId))`,
-        { replacements: { cleanId }, type: sequelize.QueryTypes.SELECT }
+      // 2. Upsert into scores
+      await sequelize.query(
+        `INSERT INTO scores (roll_number, parameter_id, marks, semester, provisional, calculated_at)
+         VALUES (:canonicalRoll, 'hundred_days', :marks, 1, false, NOW())
+         ON CONFLICT (roll_number, parameter_id, semester)
+         DO UPDATE SET marks = EXCLUDED.marks, provisional = false, calculated_at = NOW()`,
+        {
+          replacements: {
+            canonicalRoll,
+            marks
+          },
+          type: sequelize.QueryTypes.INSERT
+        }
       );
 
-      if (existingScore.length > 0) {
-        await sequelize.query(
-          `UPDATE scores
-           SET hundred_days_score = :marks,
-               total_score = COALESCE(language_score, 0) + COALESCE(gate_score, 0) + 
-                             COALESCE(competition_score, 0) + COALESCE(internship_score, 0) + 
-                             COALESCE(certificate_score, 0) + COALESCE(aptitude_score, 0) + 
-                             COALESCE(coding_score, 0) + COALESCE(cp_score, 0) + 
-                             COALESCE(oss_score, 0) + COALESCE(month_score, 0) + 
-                             COALESCE(proj_score, 0) + :marks,
-               calculated_at = NOW(),
-               updated_at = NOW()
-           WHERE LOWER(TRIM(register_number)) = LOWER(TRIM(:cleanId))`,
-          { replacements: { cleanId, marks }, type: sequelize.QueryTypes.UPDATE }
-        );
-      } else {
-        await sequelize.query(
-          `INSERT INTO scores 
-           (register_number, academic_year, hundred_days_score, total_score, calculated_at, created_at, updated_at)
-           VALUES (:cleanId, 2026, :marks, :marks, NOW(), NOW(), NOW())
-           ON CONFLICT (register_number, academic_year) DO UPDATE
-           SET hundred_days_score = EXCLUDED.hundred_days_score,
-               total_score = COALESCE(scores.language_score, 0) + COALESCE(scores.gate_score, 0) + 
-                             COALESCE(scores.competition_score, 0) + COALESCE(scores.internship_score, 0) + 
-                             COALESCE(scores.certificate_score, 0) + COALESCE(scores.aptitude_score, 0) + 
-                             COALESCE(scores.coding_score, 0) + COALESCE(scores.cp_score, 0) + 
-                             COALESCE(scores.oss_score, 0) + COALESCE(scores.month_score, 0) + 
-                             COALESCE(scores.proj_score, 0) + EXCLUDED.hundred_days_score,
-               calculated_at = NOW(),
-               updated_at = NOW()`,
-          { replacements: { cleanId, marks }, type: sequelize.QueryTypes.INSERT }
-        );
-      }
+      // 3. Update profiles total score
+      await updateStudentProfileScore(canonicalRoll);
 
       res.json({
         success: true,
@@ -569,57 +571,56 @@ router.get('/cohort', authenticate, async (req, res, next) => {
       });
     }
 
-    const mentorId = req.user.id_number || req.user.roll_number;
+    const mentorRoll = req.user.roll_number || req.user.id_number;
     const mentorDept = req.user.department;
+    const isMentor = req.user.role === 'mentor';
 
     let cohortQuery = `
       SELECT 
-        COALESCE(
-          CASE 
-            WHEN p.id_number IS NOT NULL AND TRIM(p.id_number) != '' AND NOT (p.id_number ~ '^[0-9]{1,4}$') 
-            THEN p.id_number 
-            ELSE p.register_number 
-          END, 
-          p.register_number,
-          p.id_number
-        ) as id_number,
-        p.register_number,
-        p.name,
-        p.department,
-        p.college,
-        p.mentor_year,
+        s.roll_number as id_number,
+        s.roll_number,
+        s.register_number,
+        s.name,
+        s.department,
+        s.section,
+        s.batch,
+        s.year_of_study as mentor_year,
         e.id as evidence_id,
-        COALESCE(e.training_program, 'NOT_SELECTED') as training_program,
+        COALESCE(e.programme_type, 'NOT_SELECTED') as training_program,
         COALESCE(
-          s.hundred_days_score,
-          s.marks,
+          sc.marks,
           CASE 
-            WHEN e.training_program = 'HOPE_ELITE' THEN 15
-            WHEN e.training_program = 'HOPE_NON_ELITE' THEN 10
-            WHEN e.training_program = 'PEP' THEN 5
+            WHEN e.programme_type = 'HOPE_ELITE' THEN 15
+            WHEN e.programme_type = 'HOPE_NON_ELITE' THEN 10
+            WHEN e.programme_type = 'PEP' THEN 5
             ELSE 0 
           END,
           0
-        ) as marks,
-        COALESCE(e.status, CASE WHEN COALESCE(s.hundred_days_score, s.marks, 0) > 0 THEN 'VERIFIED' ELSE 'NOT_SUBMITTED' END) as status,
-        e.verified_at,
-        e.submitted_at
-      FROM profiles p
+        )::numeric as marks,
+        COALESCE(e.status, CASE WHEN COALESCE(sc.marks, 0) > 0 THEN 'VERIFIED' ELSE 'NOT_SUBMITTED' END) as status,
+        e.completed_at as verified_at,
+        e.completed_at as submitted_at
+      FROM students s
       LEFT JOIN hundred_days_evidence e 
-        ON LOWER(TRIM(e.student_id)) = LOWER(TRIM(p.id_number)) 
-        OR (p.register_number IS NOT NULL AND LOWER(TRIM(e.student_id)) = LOWER(TRIM(p.register_number)))
-      LEFT JOIN scores s 
-        ON LOWER(TRIM(s.register_number)) = LOWER(TRIM(p.id_number)) 
-        OR (p.register_number IS NOT NULL AND LOWER(TRIM(s.register_number)) = LOWER(TRIM(p.register_number)))
-      WHERE p.role = 'student'
+        ON LOWER(TRIM(e.roll_number)) = LOWER(TRIM(s.roll_number)) 
+        OR (s.register_number IS NOT NULL AND LOWER(TRIM(e.roll_number)) = LOWER(TRIM(s.register_number)))
+      LEFT JOIN scores sc 
+        ON (LOWER(TRIM(sc.roll_number)) = LOWER(TRIM(s.roll_number)) OR (s.register_number IS NOT NULL AND LOWER(TRIM(sc.roll_number)) = LOWER(TRIM(s.register_number))))
+        AND sc.parameter_id IN ('hundred_days', '100_days', '100_days_coding')
+      WHERE 1=1
     `;
 
-    const replacements = { mentorId, mentorDept };
-    if (req.user.role === 'mentor') {
-      cohortQuery += ` AND (p.assigned_mentor_id = :mentorId OR (p.assigned_mentor_id IS NULL AND p.department = :mentorDept))`;
+    const replacements = { mentorRoll, mentorDept };
+
+    if (isMentor) {
+      cohortQuery += ` AND (
+        s.mentor_roll_number = :mentorRoll 
+        OR (s.mentor_roll_number IS NULL AND s.department = :mentorDept)
+        OR :mentorDept = 'ALL'
+      )`;
     }
 
-    cohortQuery += ` ORDER BY p.department, p.id_number`;
+    cohortQuery += ` ORDER BY s.department, s.roll_number`;
 
     const students = await sequelize.query(cohortQuery, {
       replacements,
@@ -658,32 +659,34 @@ router.post('/batch-evaluate', authenticate, async (req, res, next) => {
     }
 
     const marks = PROGRAM_MARKS[training_program] || 0;
-    const mentorId = req.user.id_number || req.user.roll_number || 'MENTOR';
+    const mentorRoll = req.user.roll_number || req.user.id_number || 'MENTOR';
 
     for (const sId of student_ids) {
-      const cleanId = String(sId).trim();
-      
+      const canonicalRoll = await resolveStudentRoll(sId);
+
       // 1. Evidence upsert
       const existing = await sequelize.query(
-        `SELECT id FROM hundred_days_evidence WHERE LOWER(TRIM(student_id)) = LOWER(:cleanId)`,
-        { replacements: { cleanId }, type: sequelize.QueryTypes.SELECT }
+        `SELECT id FROM hundred_days_evidence WHERE LOWER(roll_number) = LOWER(:canonicalRoll)`,
+        { replacements: { canonicalRoll }, type: sequelize.QueryTypes.SELECT }
       );
 
       if (existing.length > 0) {
         await sequelize.query(
           `UPDATE hundred_days_evidence
-           SET training_program = :training_program,
-               selection_year = 2026,
-               status = 'VERIFIED',
-               mentor_id = :mentorId,
-               verified_at = NOW(),
-               verification_source = 'MENTOR_MANUAL'
+           SET programme_type = :training_program,
+               days_completed = CASE WHEN :marks > 0 THEN 100 ELSE 0 END,
+               total_days = 100,
+               badge_earned = (:marks > 0),
+               status = CASE WHEN :marks > 0 THEN 'VERIFIED' ELSE 'NOT_SELECTED' END,
+               evaluated_by_mentor_roll = :mentorRoll,
+               completed_at = NOW()
            WHERE id = :id`,
           {
             replacements: {
               id: existing[0].id,
               training_program,
-              mentorId
+              marks,
+              mentorRoll
             },
             type: sequelize.QueryTypes.UPDATE
           }
@@ -691,64 +694,37 @@ router.post('/batch-evaluate', authenticate, async (req, res, next) => {
       } else {
         await sequelize.query(
           `INSERT INTO hundred_days_evidence
-           (student_id, training_program, selection_year, status, mentor_id, verified_at, verification_source, submitted_at)
-           VALUES (:cleanId, :training_program, 2026, 'VERIFIED', :mentorId, NOW(), 'MENTOR_MANUAL', NOW())
-           ON CONFLICT (student_id) DO UPDATE
-           SET training_program = EXCLUDED.training_program,
-               status = 'VERIFIED',
-               mentor_id = EXCLUDED.mentor_id,
-               verified_at = NOW(),
-               verification_source = 'MENTOR_MANUAL'`,
+           (roll_number, programme_type, days_completed, total_days, badge_earned, status, evaluated_by_mentor_roll, completed_at)
+           VALUES (:canonicalRoll, :training_program, CASE WHEN :marks > 0 THEN 100 ELSE 0 END, 100, (:marks > 0), CASE WHEN :marks > 0 THEN 'VERIFIED' ELSE 'NOT_SELECTED' END, :mentorRoll, NOW())`,
           {
             replacements: {
-              cleanId,
+              canonicalRoll,
               training_program,
-              mentorId
+              marks,
+              mentorRoll
             },
             type: sequelize.QueryTypes.INSERT
           }
         );
       }
 
-      // 2. Scores master row update or insert
-      const existingScore = await sequelize.query(
-        `SELECT id FROM scores WHERE LOWER(TRIM(register_number)) = LOWER(:cleanId)`,
-        { replacements: { cleanId }, type: sequelize.QueryTypes.SELECT }
+      // 2. Scores upsert
+      await sequelize.query(
+        `INSERT INTO scores (roll_number, parameter_id, marks, semester, provisional, calculated_at)
+         VALUES (:canonicalRoll, 'hundred_days', :marks, 1, false, NOW())
+         ON CONFLICT (roll_number, parameter_id, semester)
+         DO UPDATE SET marks = EXCLUDED.marks, provisional = false, calculated_at = NOW()`,
+        {
+          replacements: {
+            canonicalRoll,
+            marks
+          },
+          type: sequelize.QueryTypes.INSERT
+        }
       );
 
-      if (existingScore.length > 0) {
-        await sequelize.query(
-          `UPDATE scores
-           SET hundred_days_score = :marks,
-               total_score = COALESCE(language_score, 0) + COALESCE(gate_score, 0) + 
-                             COALESCE(competition_score, 0) + COALESCE(internship_score, 0) + 
-                             COALESCE(certificate_score, 0) + COALESCE(aptitude_score, 0) + 
-                             COALESCE(coding_score, 0) + COALESCE(cp_score, 0) + 
-                             COALESCE(oss_score, 0) + COALESCE(month_score, 0) + 
-                             COALESCE(proj_score, 0) + :marks,
-               calculated_at = NOW(),
-               updated_at = NOW()
-           WHERE LOWER(TRIM(register_number)) = LOWER(:cleanId)`,
-          { replacements: { cleanId, marks }, type: sequelize.QueryTypes.UPDATE }
-        );
-      } else {
-        await sequelize.query(
-          `INSERT INTO scores 
-           (register_number, academic_year, hundred_days_score, total_score, calculated_at, created_at, updated_at)
-           VALUES (:cleanId, 2026, :marks, :marks, NOW(), NOW(), NOW())
-           ON CONFLICT (register_number, academic_year) DO UPDATE
-           SET hundred_days_score = EXCLUDED.hundred_days_score,
-               total_score = COALESCE(scores.language_score, 0) + COALESCE(scores.gate_score, 0) + 
-                             COALESCE(scores.competition_score, 0) + COALESCE(scores.internship_score, 0) + 
-                             COALESCE(scores.certificate_score, 0) + COALESCE(scores.aptitude_score, 0) + 
-                             COALESCE(scores.coding_score, 0) + COALESCE(scores.cp_score, 0) + 
-                             COALESCE(scores.oss_score, 0) + COALESCE(scores.month_score, 0) + 
-                             COALESCE(scores.proj_score, 0) + EXCLUDED.hundred_days_score,
-               calculated_at = NOW(),
-               updated_at = NOW()`,
-          { replacements: { cleanId, marks }, type: sequelize.QueryTypes.INSERT }
-        );
-      }
+      // 3. Update profiles total score
+      await updateStudentProfileScore(canonicalRoll);
     }
 
     res.json({
