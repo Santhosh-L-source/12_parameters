@@ -202,7 +202,9 @@ router.get('/my-students', async (req, res) => {
         name: st.name,
         email: st.email,
         department: st.department,
-        college: "St. Joseph's College of Engineering",
+        college: ((st.register_number && st.register_number.startsWith('3124')) || (st.roll_number && st.roll_number.startsWith('3124')))
+          ? "St. Joseph's Institute of Technology"
+          : "St. Joseph's College of Engineering",
         scores: {
           hundred_days: sMap.hundred_days || 0,
           language: sMap.language || 0,

@@ -75,6 +75,18 @@ function calculateSemesterFromRoll(rollNo) {
 }
 
 /**
+ * Infer college based on register number or roll number prefix (3124 = SJIT, 3123 = SJCE)
+ */
+function inferCollege(registerNumber, rollNumber) {
+  const reg = String(registerNumber || '').trim().toUpperCase();
+  const roll = String(rollNumber || '').trim().toUpperCase();
+  if (reg.startsWith('3124') || roll.startsWith('3124')) {
+    return "St. Joseph's Institute of Technology";
+  }
+  return "St. Joseph's College of Engineering";
+}
+
+/**
  * Fetch and pivot student scores data
  */
 async function getPivotedScoresData({ semester, department, search }) {
@@ -86,7 +98,10 @@ async function getPivotedScoresData({ semester, department, search }) {
       register_number, 
       name, 
       department, 
-      'St. Joseph''s College of Engineering' AS college,
+      CASE 
+        WHEN register_number LIKE '3124%' OR roll_number LIKE '3124%' THEN 'St. Joseph''s Institute of Technology'
+        ELSE 'St. Joseph''s College of Engineering'
+      END AS college,
       batch
     FROM students
     WHERE 1=1
@@ -103,7 +118,11 @@ async function getPivotedScoresData({ semester, department, search }) {
     replacements.search = `%${search.toLowerCase()}%`;
   }
 
-  profileQuery += ` ORDER BY department ASC, LOWER(TRIM(name)) ASC, roll_number ASC`;
+  profileQuery += ` ORDER BY 
+    CASE WHEN register_number LIKE '3124%' OR roll_number LIKE '3124%' THEN 2 ELSE 1 END ASC,
+    department ASC, 
+    LOWER(TRIM(name)) ASC, 
+    roll_number ASC`;
 
   const students = await sequelize.query(profileQuery, {
     replacements,
@@ -156,8 +175,10 @@ async function getPivotedScoresData({ semester, department, search }) {
                           scoresByStudent.get((reg || '').toUpperCase()) || 
                           new Map();
 
+    const collegeName = student.college || inferCollege(reg, roll);
+
     const row = {
-      college: student.college || "St. Joseph's Group of Institutions",
+      college: collegeName,
       department: student.department || 'General',
       roll_number: roll,
       register_number: reg || student.id_number || '',

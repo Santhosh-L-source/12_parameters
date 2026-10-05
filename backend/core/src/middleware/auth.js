@@ -44,7 +44,8 @@ async function authenticate(req, res, next) {
 
     // Fetch latest user data from students, mentors, or admins
     const users = await sequelize.query(
-      `SELECT roll_number, register_number, name, email, department, COALESCE(role, 'student') as role, mentor_roll_number as assigned_mentor_id, 'St. Joseph''s College of Engineering' as college 
+      `SELECT roll_number, register_number, name, email, department, COALESCE(role, 'student') as role, mentor_roll_number as assigned_mentor_id, 
+              CASE WHEN register_number LIKE '3124%' OR roll_number LIKE '3124%' THEN 'St. Joseph''s Institute of Technology' ELSE 'St. Joseph''s College of Engineering' END as college 
        FROM students
        WHERE LOWER(TRIM(roll_number)) = LOWER(TRIM(:idNumber))
        UNION ALL

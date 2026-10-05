@@ -51,7 +51,9 @@ router.get('/dashboard', async (req, res) => {
         register_number: student.register_number,
         email: student.email,
         department: student.department,
-        college: student.college || "St. Joseph's College of Engineering"
+        college: student.college || (((student.register_number && student.register_number.startsWith('3124')) || (student.roll_number && student.roll_number.startsWith('3124'))) 
+          ? "St. Joseph's Institute of Technology" 
+          : "St. Joseph's College of Engineering")
       },
       marks_summary: {
         total_parameters: 12,
@@ -76,6 +78,12 @@ router.get('/dashboard', async (req, res) => {
  */
 router.get('/profile', async (req, res) => {
   try {
+    const reg = req.user.register_number || '';
+    const roll = req.user.roll_number || '';
+    const inferredCollege = (reg.startsWith('3124') || roll.startsWith('3124'))
+      ? "St. Joseph's Institute of Technology"
+      : "St. Joseph's College of Engineering";
+
     res.json({
       success: true,
       student: {
@@ -84,7 +92,7 @@ router.get('/profile', async (req, res) => {
         register_number: req.user.register_number,
         email: req.user.email,
         department: req.user.department,
-        college: req.user.college || "St. Joseph's College of Engineering"
+        college: req.user.college || inferredCollege
       }
     });
   } catch (error) {

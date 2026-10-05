@@ -850,7 +850,9 @@ router.get('/student-scores', async (req, res) => {
         name: st.name,
         email: st.email,
         department: st.department,
-        college: st.college || "St. Joseph's College of Engineering",
+        college: ((st.register_number && st.register_number.startsWith('3124')) || (st.roll_number && st.roll_number.startsWith('3124')))
+          ? "St. Joseph's Institute of Technology"
+          : "St. Joseph's College of Engineering",
         year: yearInfo.year,
         batch: yearInfo.batch,
         batch_label: yearInfo.label,
