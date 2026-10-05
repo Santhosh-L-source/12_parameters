@@ -63,6 +63,19 @@ async function ensureImportJobsTable() {
 }
 ensureImportJobsTable();
 
+function inferDepartment(roll) {
+  const r = String(roll || '').toUpperCase();
+  if (r.includes('CS') || r.includes('CSE')) return 'CSE';
+  if (r.includes('IT')) return 'IT';
+  if (r.includes('AD') || r.includes('AI') || r.includes('DS')) return 'AI & DS';
+  if (r.includes('EC') || r.includes('ECE')) return 'ECE';
+  if (r.includes('EE') || r.includes('EEE')) return 'EEE';
+  if (r.includes('ME') || r.includes('MECH')) return 'MECH';
+  if (r.includes('CE') || r.includes('CIVIL')) return 'CIVIL';
+  if (r.includes('CB') || r.includes('CSBS')) return 'CSBS';
+  return 'CSE';
+}
+
 /**
  * Background worker for bulk processing monthly coding assessment data
  */
@@ -73,6 +86,9 @@ async function processImportJobInBackground({
   rollColIdx,
   nameColIdx,
   scoreColIdx,
+  regColIdx = -1,
+  deptColIdx = -1,
+  emailColIdx = -1,
   semester,
   month,
   uploadedBy,
@@ -109,7 +125,7 @@ async function processImportJobInBackground({
     let matchingProfiles = [];
     if (allRollsInFile.length > 0) {
       matchingProfiles = await sequelize.query(
-        `SELECT roll_number, register_number, name, department 
+        `SELECT roll_number, register_number, name, department, batch, year_of_study 
          FROM students 
          WHERE UPPER(TRIM(roll_number)) = ANY(ARRAY[:allRollsInFile]::text[]) 
             OR UPPER(TRIM(COALESCE(register_number, ''))) = ANY(ARRAY[:allRollsInFile]::text[])`,
@@ -126,16 +142,107 @@ async function processImportJobInBackground({
       if (p.register_number) profileMap.set(String(p.register_number).trim().toUpperCase(), p);
     }
 
+    // Auto-create/register any students found in the file that are not yet in the DB
+    const newStudentsToCreate = [];
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const rawRoll = row[rollColIdx] !== undefined ? String(row[rollColIdx]).trim() : '';
+      if (!rawRoll) continue;
+      const cleanRoll = rawRoll.toUpperCase();
+
+      if (!profileMap.has(cleanRoll)) {
+        const rawName = nameColIdx !== -1 && row[nameColIdx] !== undefined ? String(row[nameColIdx]).trim() : 'Student';
+        const rawReg = regColIdx !== -1 && row[regColIdx] !== undefined ? String(row[regColIdx]).trim() : '';
+        const rawDept = deptColIdx !== -1 && row[deptColIdx] !== undefined ? String(row[deptColIdx]).trim().toUpperCase() : '';
+        const yr = cleanRoll.startsWith('25') ? 2 : (cleanRoll.startsWith('24') ? 3 : (parseInt(semester, 10) >= 5 ? 3 : 2));
+        const batch = yr === 2 ? '2029' : '2028';
+        const dept = rawDept || inferDepartment(cleanRoll);
+        const email = (emailColIdx !== -1 && row[emailColIdx] ? String(row[emailColIdx]).trim().toLowerCase() : null) || `${cleanRoll.toLowerCase()}@hope.edu`;
+        const regNo = rawReg || cleanRoll;
+
+        const studentObj = {
+          roll_number: cleanRoll,
+          register_number: regNo,
+          name: rawName || 'Student',
+          department: dept,
+          batch,
+          year_of_study: yr,
+          email
+        };
+
+        newStudentsToCreate.push(studentObj);
+        profileMap.set(cleanRoll, studentObj);
+        if (regNo) profileMap.set(regNo.toUpperCase(), studentObj);
+      }
+    }
+
+    const CHUNK_SIZE = 500;
+
+    // Batch insert newly discovered students into students and profiles
+    if (newStudentsToCreate.length > 0) {
+      console.log(`[JOB ${jobId}] Auto-registering ${newStudentsToCreate.length} new students into database...`);
+      for (let i = 0; i < newStudentsToCreate.length; i += CHUNK_SIZE) {
+        const chunk = newStudentsToCreate.slice(i, i + CHUNK_SIZE);
+        const studentValues = [];
+        const studentReplacements = {};
+        const profileValues = [];
+        const profileReplacements = {};
+
+        chunk.forEach((st, idx) => {
+          studentValues.push(`(:roll_${idx}, :reg_${idx}, :name_${idx}, :email_${idx}, :dept_${idx}, :batch_${idx}, :yr_${idx}, 'student', :pass_${idx})`);
+          studentReplacements[`roll_${idx}`] = st.roll_number;
+          studentReplacements[`reg_${idx}`] = st.register_number;
+          studentReplacements[`name_${idx}`] = st.name;
+          studentReplacements[`email_${idx}`] = st.email;
+          studentReplacements[`dept_${idx}`] = st.department;
+          studentReplacements[`batch_${idx}`] = st.batch;
+          studentReplacements[`yr_${idx}`] = st.year_of_study;
+          studentReplacements[`pass_${idx}`] = st.register_number || st.roll_number;
+
+          profileValues.push(`(:p_roll_${idx}, :p_name_${idx}, :p_dept_${idx}, :p_batch_${idx}, 0, 0, 'NOT_ELIGIBLE', 'Active')`);
+          profileReplacements[`p_roll_${idx}`] = st.roll_number;
+          profileReplacements[`p_name_${idx}`] = st.name;
+          profileReplacements[`p_dept_${idx}`] = st.department;
+          profileReplacements[`p_batch_${idx}`] = st.batch;
+        });
+
+        try {
+          await sequelize.query(
+            `INSERT INTO students (roll_number, register_number, name, email, department, batch, year_of_study, role, password_hash)
+             VALUES ${studentValues.join(', ')}
+             ON CONFLICT (roll_number) DO UPDATE SET
+               name = EXCLUDED.name,
+               department = EXCLUDED.department,
+               batch = EXCLUDED.batch,
+               year_of_study = EXCLUDED.year_of_study`,
+            { replacements: studentReplacements, type: sequelize.QueryTypes.INSERT }
+          );
+
+          await sequelize.query(
+            `INSERT INTO profiles (roll_number, name, department, batch, total_score, coding_score, level, readiness_status)
+             VALUES ${profileValues.join(', ')}
+             ON CONFLICT (roll_number) DO UPDATE SET
+               name = EXCLUDED.name,
+               department = EXCLUDED.department,
+               batch = EXCLUDED.batch`,
+            { replacements: profileReplacements, type: sequelize.QueryTypes.INSERT }
+          );
+        } catch (createErr) {
+          console.warn('[JOB] Warning creating students chunk:', createErr.message);
+        }
+      }
+    }
+
     // 2. One bulk fetch of existing evidence for all matched students
-    const matchedRolls = Array.from(new Set(matchingProfiles.map(p => p.roll_number)));
+    const allKnownRolls = Array.from(new Set(Array.from(profileMap.values()).map(p => p.roll_number)));
     let existingEvidence = [];
-    if (matchedRolls.length > 0) {
+    if (allKnownRolls.length > 0) {
       existingEvidence = await sequelize.query(
         `SELECT id, roll_number, contest_name, percentile, score, status 
          FROM monthly_coding_evidence 
-         WHERE roll_number = ANY(ARRAY[:matchedRolls]::text[])`,
+         WHERE roll_number = ANY(ARRAY[:allKnownRolls]::text[])`,
         {
-          replacements: { matchedRolls },
+          replacements: { allKnownRolls },
           type: sequelize.QueryTypes.SELECT
         }
       );
@@ -166,8 +273,8 @@ async function processImportJobInBackground({
       const rowIndex = headerRowIndex + i + 2;
 
       const rawRoll = row[rollColIdx] !== undefined ? String(row[rollColIdx]).trim() : '';
-      const rawName = row[nameColIdx] !== undefined ? String(row[nameColIdx]).trim() : '';
-      const rawScore = row[scoreColIdx] !== undefined ? String(row[scoreColIdx]).replace('%', '').trim() : '';
+      const rawName = nameColIdx !== -1 && row[nameColIdx] !== undefined ? String(row[nameColIdx]).trim() : '';
+      const rawScore = scoreColIdx !== -1 && row[scoreColIdx] !== undefined ? String(row[scoreColIdx]).replace('%', '').trim() : '';
 
       if (!rawRoll) {
         results.errors.push({ row: rowIndex, name: rawName || 'Unknown', error: 'Roll number is missing' });
@@ -260,8 +367,6 @@ async function processImportJobInBackground({
       studentNewScores.set(actualRoll, { finalMarks, semester, cycleMonth });
       results.processed++;
     }
-
-    const CHUNK_SIZE = 500;
 
     // 4. Batch Inserts into monthly_coding_evidence
     if (toInsertEvidence.length > 0) {
@@ -514,8 +619,11 @@ router.post(
       const headers = rawData[headerRowIndex].map(h => String(h || '').trim());
       const lowerHeaders = headers.map(h => h.toLowerCase());
 
-      let rollColIdx = lowerHeaders.findIndex(h => h.includes('roll') || h.includes('id_number') || h.includes('student id') || h.includes('id no') || h.includes('register') || h.includes('reg no') || h.includes('reg'));
+      let rollColIdx = lowerHeaders.findIndex(h => h.includes('roll') || h.includes('id_number') || h.includes('student id') || h.includes('id no'));
+      let regColIdx = lowerHeaders.findIndex(h => (h.includes('reg') || h.includes('register')) && !h.includes('roll'));
       let nameColIdx = lowerHeaders.findIndex(h => h.includes('name') || h.includes('student name'));
+      let deptColIdx = lowerHeaders.findIndex(h => h.includes('dept') || h.includes('branch') || h.includes('department'));
+      let emailColIdx = lowerHeaders.findIndex(h => h.includes('mail') || h.includes('email'));
       let scoreColIdx = lowerHeaders.findIndex(h => h.includes('percent') || h.includes('score') || h.includes('mark') || h.includes('result') || h.includes('%') || h.includes('total') || h.includes('avg'));
 
       if (rollColIdx === -1) rollColIdx = 1 < headers.length ? 1 : 0;
@@ -544,6 +652,9 @@ router.post(
           rollColIdx,
           nameColIdx,
           scoreColIdx,
+          regColIdx,
+          deptColIdx,
+          emailColIdx,
           semester,
           month,
           uploadedBy,
