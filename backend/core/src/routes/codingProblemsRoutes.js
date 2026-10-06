@@ -242,7 +242,7 @@ router.post(
 
       await sequelize.query(
         `INSERT INTO scores (roll_number, parameter_id, marks, semester, provisional, calculated_at)
-         VALUES (:canonicalRoll, 'coding', :marks, 1, false, NOW())
+         VALUES (:canonicalRoll, 'coding_problems', :marks, 1, false, NOW())
          ON CONFLICT (roll_number, parameter_id, semester)
          DO UPDATE SET marks = EXCLUDED.marks, provisional = false, calculated_at = NOW()`,
         { replacements: { canonicalRoll, marks }, type: sequelize.QueryTypes.INSERT }
@@ -455,7 +455,7 @@ router.post(
 
         await sequelize.query(
           `INSERT INTO scores (roll_number, parameter_id, marks, semester, provisional, calculated_at)
-           VALUES (:studentRoll, 'coding', :marks, 1, false, NOW())
+           VALUES (:studentRoll, 'coding_problems', :marks, 1, false, NOW())
            ON CONFLICT (roll_number, parameter_id, semester)
            DO UPDATE SET marks = EXCLUDED.marks, provisional = false, calculated_at = NOW()`,
           { replacements: { studentRoll, marks }, type: sequelize.QueryTypes.INSERT }
@@ -564,7 +564,7 @@ const handleRemovePlatform = async (req, res, next) => {
 
     await sequelize.query(
       `INSERT INTO scores (roll_number, parameter_id, marks, semester, provisional, calculated_at)
-       VALUES (:canonicalRoll, 'coding', :marks, 1, false, NOW())
+       VALUES (:canonicalRoll, 'coding_problems', :marks, 1, false, NOW())
        ON CONFLICT (roll_number, parameter_id, semester)
        DO UPDATE SET marks = EXCLUDED.marks, provisional = false, calculated_at = NOW()`,
       { replacements: { canonicalRoll, marks }, type: sequelize.QueryTypes.INSERT }
