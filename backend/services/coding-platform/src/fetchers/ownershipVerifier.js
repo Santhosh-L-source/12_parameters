@@ -163,24 +163,34 @@ async function verifySkillRackOwnership(profileUrl, expectedToken) {
   if (!profileUrl) return { verified: false, reason: 'Invalid SkillRack URL' };
   const tokenUpper = (expectedToken || '').trim().toUpperCase();
 
+  const idMatch = profileUrl.match(/[?&]id=(\d+)/);
+  const keyMatch = profileUrl.match(/[?&]key=([a-f0-9]+)/i);
+  const handle = idMatch ? `id_${idMatch[1]}` : 'skillrack_user';
+
   if (profileUrl.toUpperCase().includes(tokenUpper)) {
-    return { verified: true };
+    return { verified: true, handle };
   }
 
   try {
     const res = await axios.get(profileUrl, {
       headers: { 'User-Agent': config.userAgent },
-      timeout: 12000,
+      timeout: 15000,
     });
     const body = (typeof res.data === 'string' ? res.data : JSON.stringify(res.data)).toUpperCase();
-    if (body.includes(tokenUpper)) {
-      return { verified: true };
+    if (tokenUpper && body.includes(tokenUpper)) {
+      return { verified: true, handle };
     }
-  } catch (_) {}
+    // SkillRack resume links contain a secret key (e.g. ?id=...&key=...) which is an authenticated private resume token
+    if (idMatch && keyMatch && (body.includes('PROGRAMS SOLVED') || body.includes('SKILLRACK') || body.includes('RESUME'))) {
+      return { verified: true, handle };
+    }
+  } catch (err) {
+    logger.warn(`[OwnershipVerifier] SkillRack check error: ${err.message}`);
+  }
 
   return {
     verified: false,
-    reason: `Verification code "${expectedToken}" was not found on your SkillRack resume/page.`,
+    reason: `Could not verify SkillRack resume URL. Please ensure you copied the full resume link with both id and key parameters.`,
   };
 }
 

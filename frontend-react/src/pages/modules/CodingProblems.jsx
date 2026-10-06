@@ -108,8 +108,13 @@ const CodingProblems = () => {
       let username = 'user';
       try {
         const parsed = new URL(url.trim());
-        const segments = parsed.pathname.split('/').filter(Boolean);
-        username = segments[segments.length - 1] || 'user';
+        if (platformObj.value === 'SKILLRACK') {
+          const id = parsed.searchParams.get('id');
+          username = id ? `id_${id}` : 'skillrack_user';
+        } else {
+          const segments = parsed.pathname.split('/').filter(Boolean);
+          username = segments[segments.length - 1] || 'user';
+        }
       } catch {
         username = 'user';
       }
@@ -174,9 +179,13 @@ const CodingProblems = () => {
         profile_url: urls[activeModalPlatform.value] || null,
         verification_token: verifyToken,
       });
-      setModalStep(3);
-      showAlert(`Ownership verified for ${activeModalPlatform.label}!`, 'success');
-      await loadData();
+      if (res && res.success) {
+        setModalStep(3);
+        showAlert(res.message || `Ownership verified for ${activeModalPlatform.label}!`, 'success');
+        await loadData();
+      } else {
+        showAlert(res?.message || 'Verification failed. Please check your profile and try again.', 'error');
+      }
     } catch (err) {
       showAlert(err.message || 'Verification failed. Please try again.', 'error');
     } finally {
