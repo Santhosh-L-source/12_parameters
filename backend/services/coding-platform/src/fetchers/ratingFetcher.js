@@ -153,6 +153,28 @@ async function fetchAtCoderRating(profileUrlOrHandle) {
   }
   if (!handle) return 0;
 
+  // Strategy 1: Official AtCoder history JSON API (most reliable)
+  try {
+    const jsonUrl = `https://atcoder.jp/users/${encodeURIComponent(handle)}/history/json`;
+    const jsonRes = await axios.get(jsonUrl, {
+      headers: {
+        'User-Agent': config.userAgent,
+        'Accept': 'application/json'
+      },
+      timeout: 10000,
+    });
+
+    if (Array.isArray(jsonRes.data) && jsonRes.data.length > 0) {
+      const last = jsonRes.data[jsonRes.data.length - 1];
+      const rating = last.NewRating || 0;
+      logger.info(`AtCoder rating from history JSON for ${handle}: ${rating}`);
+      return rating;
+    }
+  } catch (jsonErr) {
+    logger.warn(`AtCoder history JSON fetch failed for ${handle}: ${jsonErr.message}`);
+  }
+
+  // Strategy 2: Profile page scrape fallback
   try {
     const url = `https://atcoder.jp/users/${encodeURIComponent(handle)}`;
     const res = await axios.get(url, {
@@ -163,7 +185,6 @@ async function fetchAtCoderRating(profileUrlOrHandle) {
     const html = res.data || '';
     let rating = 0;
 
-    // Strategy 1: Cheerio table row
     try {
       const $ = cheerio.load(html);
       $('th').each((i, el) => {
@@ -175,10 +196,8 @@ async function fetchAtCoderRating(profileUrlOrHandle) {
       });
     } catch (e) {}
 
-    // Strategy 2: Regex
     if (!rating) {
-      const match = html.match(/Rating\s*<\/th>\s*<td[^>]*>\s*<span[^>]*>\s*(\d+)/i) ||
-                    html.match(/Rating\s*<\/th>\s*<td[^>]*>\s*(\d+)/i);
+      const match = html.match(/Rating\s*<\/th>\s*<td[^>]*>[\s\S]*?(\d+)[\s\S]*?<\/td>/i);
       if (match) rating = parseInt(match[1], 10);
     }
 

@@ -80,56 +80,52 @@ async function fetchAtCoderRating(profileUrl) {
   const handle = extractHandle('ATCODER', profileUrl);
   if (!handle) throw new Error(`Cannot extract AtCoder handle from: ${profileUrl}`);
 
-  // Fetch from profile page to get rating (kenkoooo API doesn't include rating field)
-  const res = await axios.get(`https://atcoder.jp/users/${encodeURIComponent(handle)}`, {
-    headers: { 'User-Agent': USER_AGENT },
-    timeout: 15000,
-  });
-
-  const html = res.data;
   let rating = 0;
   let highestRating = 0;
 
-  // Extract current rating from page
-  const ratingMatch = html.match(/<th[^>]*>Rating<\/th>\s*<td[^>]*>.*?<span[^>]*class=['"]user-[^'"]*['"][^>]*>(\d+)<\/span>/i);
-  if (ratingMatch) {
-    rating = parseInt(ratingMatch[1], 10);
-  }
-
-  // Extract highest rating
-  const highestMatch = html.match(/<th[^>]*>Highest Rating<\/th>\s*<td[^>]*>.*?<span[^>]*class=['"]user-[^'"]*['"][^>]*>(\d+)<\/span>/i);
-  if (highestMatch) {
-    highestRating = parseInt(highestMatch[1], 10);
-  }
-
-  // Fallback: try to extract from rating_history array
-  if (rating === 0) {
-    const historyMatch = html.match(/var\s+rating_history\s*=\s*\[([\s\S]*?)\];/);
-    if (historyMatch) {
-      try {
-        const historyJson = '[' + historyMatch[1] + ']';
-        const history = JSON.parse(historyJson);
-        if (history.length > 0) {
-          const latest = history[history.length - 1];
-          rating = latest.NewRating || 0;
-          // Find max rating in history
-          history.forEach(contest => {
-            if (contest.NewRating > highestRating) {
-              highestRating = contest.NewRating;
-            }
-          });
-        }
-      } catch (e) {
-        console.error('Failed to parse AtCoder rating history:', e.message);
-      }
+  // Strategy 1: Official JSON History endpoint
+  try {
+    const jsonRes = await axios.get(`https://atcoder.jp/users/${encodeURIComponent(handle)}/history/json`, {
+      headers: { 'User-Agent': USER_AGENT, 'Accept': 'application/json' },
+      timeout: 10000,
+    });
+    if (Array.isArray(jsonRes.data) && jsonRes.data.length > 0) {
+      const last = jsonRes.data[jsonRes.data.length - 1];
+      rating = last.NewRating || 0;
+      jsonRes.data.forEach(contest => {
+        if (contest.NewRating > highestRating) highestRating = contest.NewRating;
+      });
+      return {
+        handle,
+        rating,
+        highestRating: highestRating || rating,
+        contestsAttended: jsonRes.data.length,
+      };
     }
+  } catch (e) {
+    // Fallback to HTML scrape
   }
+
+  // Strategy 2: Profile HTML Scrape
+  try {
+    const res = await axios.get(`https://atcoder.jp/users/${encodeURIComponent(handle)}`, {
+      headers: { 'User-Agent': USER_AGENT },
+      timeout: 15000,
+    });
+
+    const html = res.data || '';
+    const ratingMatch = html.match(/Rating\s*<\/th>\s*<td[^>]*>[\s\S]*?(\d+)[\s\S]*?<\/td>/i);
+    if (ratingMatch) rating = parseInt(ratingMatch[1], 10);
+
+    const highestMatch = html.match(/Highest\s+Rating\s*<\/th>\s*<td[^>]*>[\s\S]*?(\d+)[\s\S]*?<\/td>/i);
+    if (highestMatch) highestRating = parseInt(highestMatch[1], 10);
+  } catch (err) {}
 
   return {
     handle,
     rating,
     highestRating: highestRating || rating,
-    contestsCount: 0, // Could extract from history length if needed
+    contestsAttended: 0,
   };
 }
 
