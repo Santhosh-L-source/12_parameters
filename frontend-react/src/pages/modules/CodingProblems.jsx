@@ -124,7 +124,12 @@ const CodingProblems = () => {
       });
 
       if (res.success) {
-        showAlert(`${platformObj.label} profile linked! Please verify ownership.`, 'success');
+        if (res.is_verified) {
+          showAlert(`${platformObj.label} profile updated!`, 'success');
+        } else {
+          showAlert(`${platformObj.label} profile linked! Please verify ownership to count verified marks.`, 'success');
+          openVerificationModal(platformObj);
+        }
         await loadData();
       } else {
         showAlert(res.message || 'Submission failed', 'error');
@@ -316,13 +321,20 @@ const CodingProblems = () => {
                         </button>
                       </div>
                     ) : isSaved ? (
-                      <button
-                        type="button"
-                        className="btn-verify-badge badge-unverified"
-                        onClick={() => openVerificationModal(plat)}
-                      >
-                        ⚠️ Verify Ownership
-                      </button>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        {ev?.total_solved > 0 && (
+                          <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#64748b', background: '#f1f5f9', padding: '0.3rem 0.6rem', borderRadius: '6px' }}>
+                            {ev.total_solved} Solved ({ev.sql_solved || 0} SQL)
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          className="btn-verify-badge badge-unverified"
+                          onClick={() => openVerificationModal(plat)}
+                        >
+                          ⚠️ Verify Ownership
+                        </button>
+                      </div>
                     ) : null}
 
                     <button

@@ -16,10 +16,16 @@ const { authenticate } = require('../middleware/auth');
 const sequelize = require('../config/database');
 
 let getFetcher = null;
+let verifyPlatformOwnership = null;
 try {
   getFetcher = require('../../../services/coding-platform/src/fetchers').getFetcher;
 } catch (e) {
   console.warn('[CodingProblems] Initial getFetcher require:', e.message);
+}
+try {
+  verifyPlatformOwnership = require('../../../services/coding-platform/src/fetchers/ownershipVerifier').verifyPlatformOwnership;
+} catch (e) {
+  console.warn('[CodingProblems] Initial verifyPlatformOwnership require:', e.message);
 }
 
 async function safeFetchPlatform(platform, profileUrl) {
@@ -172,6 +178,8 @@ router.post(
 
       let isUpdate = false;
       let evidence;
+      // Preserve verified status if previously verified, otherwise default to PENDING until ownership verified
+      const currentStatus = (existing.length > 0 && existing[0].status === 'VERIFIED') ? 'VERIFIED' : 'PENDING';
 
       if (existing.length > 0) {
         isUpdate = true;
@@ -185,8 +193,7 @@ router.post(
                profile_url = COALESCE(:profile_url, profile_url),
                username = :username,
                distinct_key = :distinct_key,
-               status = 'VERIFIED',
-               verified_at = NOW(),
+               status = :currentStatus,
                last_fetched_at = NOW()
            WHERE id = :id`,
           {
@@ -196,19 +203,20 @@ router.post(
               sql_solved: resSql,
               profile_url: profile_url || null,
               username: username.trim(),
-              distinct_key
+              distinct_key,
+              currentStatus
             },
             type: sequelize.QueryTypes.UPDATE
           }
         );
-        evidence = { id: existing[0].id, platform: platUpper, username, total_solved: resTotal, sql_solved: resSql, status: 'VERIFIED' };
+        evidence = { id: existing[0].id, platform: platUpper, username, total_solved: resTotal, sql_solved: resSql, status: currentStatus };
       } else {
         const insertResult = await sequelize.query(
           `INSERT INTO coding_problems_evidence
            (roll_number, platform, username, distinct_key,
-            total_solved, sql_solved, profile_url, fetch_method, status, submitted_at, verified_at, last_fetched_at)
+            total_solved, sql_solved, profile_url, fetch_method, status, submitted_at, last_fetched_at)
            VALUES (:canonicalRoll, :platUpper, :username, :distinct_key,
-                   :finalTotal, :finalSql, :profile_url, :fetch_method, 'VERIFIED', NOW(), NOW(), NOW())
+                   :finalTotal, :finalSql, :profile_url, :fetch_method, :currentStatus, NOW(), NOW())
            RETURNING id, roll_number, platform, username, total_solved, sql_solved, status, submitted_at`,
           {
             replacements: {
@@ -219,7 +227,8 @@ router.post(
               finalTotal,
               finalSql,
               profile_url: profile_url || null,
-              fetch_method: fetch_method || (profile_url ? 'SCRAPER' : 'MANUAL')
+              fetch_method: fetch_method || (profile_url ? 'SCRAPER' : 'MANUAL'),
+              currentStatus
             },
             type: sequelize.QueryTypes.INSERT
           }
@@ -229,7 +238,7 @@ router.post(
           : (insertResult && insertResult[0] ? insertResult[0] : {});
       }
 
-      // Automatically recalculate marks across all verified platforms
+      // Automatically recalculate marks across all VERIFIED platforms
       const allVerified = await sequelize.query(
         `SELECT total_solved, sql_solved FROM coding_problems_evidence
          WHERE LOWER(roll_number) = LOWER(:canonicalRoll) AND status = 'VERIFIED'`,
@@ -252,14 +261,159 @@ router.post(
 
       res.status(isUpdate ? 200 : 201).json({
         success: true,
-        message: `Coding problems stats verified! Marks: ${marks}/25 (Total: ${totalSolved}, SQL: ${sqlSolved})`,
+        message: currentStatus === 'VERIFIED'
+          ? `Coding problems stats updated! Verified Marks: ${marks}/25`
+          : `${platUpper} profile linked! Please verify profile ownership to earn marks.`,
         evidence,
+        marks,
+        total_solved_sum: totalSolved,
+        sql_solved_sum: sqlSolved,
+        is_verified: currentStatus === 'VERIFIED'
+      });
+    } catch (err) {
+      console.error('[CODING_PROBLEMS] Submit error:', err.message);
+      next(err);
+    }
+  }
+);
+
+/**
+ * POST /api/coding-problems/verify-ownership
+ */
+router.post(
+  '/verify-ownership',
+  authenticate,
+  [
+    body('platform').notEmpty().withMessage('platform is required'),
+    body('profile_url').optional({ checkFalsy: true }).isString(),
+    body('verification_token').notEmpty().withMessage('verification_token is required'),
+  ],
+  validate,
+  async (req, res, next) => {
+    try {
+      const studentRoll = req.user.roll_number || req.user.id_number;
+      const { platform, profile_url, verification_token } = req.body;
+      const canonicalRoll = await resolveStudentRoll(studentRoll);
+      const platUpper = platform.trim().toUpperCase();
+
+      // Find existing evidence or use passed profile_url
+      const existing = await sequelize.query(
+        `SELECT id, profile_url, username, total_solved, sql_solved FROM coding_problems_evidence
+         WHERE LOWER(roll_number) = LOWER(:canonicalRoll) AND UPPER(platform) = :platUpper
+         LIMIT 1`,
+        { replacements: { canonicalRoll, platUpper }, type: sequelize.QueryTypes.SELECT }
+      );
+
+      const targetUrl = (profile_url && profile_url.trim()) || (existing.length > 0 ? existing[0].profile_url : null);
+      if (!targetUrl) {
+        return res.status(400).json({
+          success: false,
+          error: 'Profile URL required',
+          message: 'Please link your profile URL first.'
+        });
+      }
+
+      if (!verifyPlatformOwnership) {
+        verifyPlatformOwnership = require('../../../services/coding-platform/src/fetchers/ownershipVerifier').verifyPlatformOwnership;
+      }
+
+      const verifyResult = await verifyPlatformOwnership(platUpper, targetUrl, verification_token);
+
+      if (!verifyResult || !verifyResult.verified) {
+        return res.status(400).json({
+          success: false,
+          verified: false,
+          error: 'Verification Failed',
+          message: verifyResult?.reason || `Verification code "${verification_token}" was not found in your ${platUpper} bio or profile. Please add it and try again.`
+        });
+      }
+
+      // Re-fetch latest stats
+      let freshTotal = 0;
+      let freshSql = 0;
+      const fetchedStats = await safeFetchPlatform(platUpper, targetUrl);
+      if (fetchedStats && fetchedStats.total > 0) {
+        freshTotal = fetchedStats.total;
+        freshSql = fetchedStats.sql;
+      } else if (existing.length > 0) {
+        freshTotal = existing[0].total_solved || 0;
+        freshSql = existing[0].sql_solved || 0;
+      }
+
+      // Update record to VERIFIED
+      if (existing.length > 0) {
+        await sequelize.query(
+          `UPDATE coding_problems_evidence
+           SET status = 'VERIFIED',
+               verified_at = NOW(),
+               last_fetched_at = NOW(),
+               total_solved = :freshTotal,
+               sql_solved = :freshSql,
+               profile_url = :targetUrl
+           WHERE id = :id`,
+          {
+            replacements: {
+              id: existing[0].id,
+              freshTotal,
+              freshSql,
+              targetUrl
+            },
+            type: sequelize.QueryTypes.UPDATE
+          }
+        );
+      } else {
+        const username = verifyResult.handle || 'user';
+        const distinct_key = `${platUpper}:${username}`;
+        await sequelize.query(
+          `INSERT INTO coding_problems_evidence
+           (roll_number, platform, username, distinct_key, total_solved, sql_solved, profile_url, fetch_method, status, submitted_at, verified_at, last_fetched_at)
+           VALUES (:canonicalRoll, :platUpper, :username, :distinct_key, :freshTotal, :freshSql, :targetUrl, 'SCRAPER', 'VERIFIED', NOW(), NOW(), NOW())`,
+          {
+            replacements: {
+              canonicalRoll,
+              platUpper,
+              username,
+              distinct_key,
+              freshTotal,
+              freshSql,
+              targetUrl
+            },
+            type: sequelize.QueryTypes.INSERT
+          }
+        );
+      }
+
+      // Recalculate marks across all verified platforms
+      const allVerified = await sequelize.query(
+        `SELECT total_solved, sql_solved FROM coding_problems_evidence
+         WHERE LOWER(roll_number) = LOWER(:canonicalRoll) AND status = 'VERIFIED'`,
+        { replacements: { canonicalRoll }, type: sequelize.QueryTypes.SELECT }
+      );
+
+      const totalSolved = allVerified.reduce((sum, e) => sum + (e.total_solved || 0), 0);
+      const sqlSolved = allVerified.reduce((sum, e) => sum + (e.sql_solved || 0), 0);
+      const marks = calculateCodingProblemsMarks(totalSolved, sqlSolved);
+
+      await sequelize.query(
+        `INSERT INTO scores (roll_number, parameter_id, marks, semester, provisional, calculated_at)
+         VALUES (:canonicalRoll, 'coding_problems', :marks, 1, false, NOW())
+         ON CONFLICT (roll_number, parameter_id, semester)
+         DO UPDATE SET marks = EXCLUDED.marks, provisional = false, calculated_at = NOW()`,
+        { replacements: { canonicalRoll, marks }, type: sequelize.QueryTypes.INSERT }
+      );
+
+      await updateStudentProfileScore(canonicalRoll);
+
+      res.json({
+        success: true,
+        verified: true,
+        message: `Ownership verified for ${platUpper}! Solved: ${freshTotal} (${freshSql} SQL). Total Verified Marks: ${marks}/25`,
         marks,
         total_solved_sum: totalSolved,
         sql_solved_sum: sqlSolved
       });
     } catch (err) {
-      console.error('[CODING_PROBLEMS] Submit error:', err.message);
+      console.error('[CODING_PROBLEMS] Verify ownership error:', err.message);
       next(err);
     }
   }
