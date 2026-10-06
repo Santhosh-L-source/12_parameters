@@ -44,23 +44,70 @@ const FileUpload = ({
       return;
     }
 
-    // Read file via FileReader as robust client-side Data URL
-    const fileReader = new FileReader();
-    const readAsDataUrlPromise = new Promise((resolve) => {
-      fileReader.onload = (e) => resolve(e.target.result);
-      fileReader.onerror = () => resolve('');
-    });
-    fileReader.readAsDataURL(file);
+    // Client-side image compression helper for lightning-fast submission
+    const compressImage = async (imgFile) => {
+      if (!imgFile.type.startsWith('image/')) return null;
+      return new Promise((resolve) => {
+        const img = new Image();
+        const objUrl = URL.createObjectURL(imgFile);
+        img.onload = () => {
+          URL.revokeObjectURL(objUrl);
+          const maxDim = 1400;
+          let w = img.width;
+          let h = img.height;
+          if (w > maxDim || h > maxDim) {
+            if (w > h) {
+              h = Math.round((h * maxDim) / w);
+              w = maxDim;
+            } else {
+              w = Math.round((w * maxDim) / h);
+              h = maxDim;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', 0.82));
+        };
+        img.onerror = () => {
+          URL.revokeObjectURL(objUrl);
+          resolve(null);
+        };
+        img.src = objUrl;
+      });
+    };
 
     setUploading(true);
     try {
-      const clientDataUri = await readAsDataUrlPromise;
+      let clientDataUri = '';
+      if (file.type.startsWith('image/')) {
+        clientDataUri = await compressImage(file);
+      }
+      if (!clientDataUri) {
+        const fileReader = new FileReader();
+        clientDataUri = await new Promise((resolve) => {
+          fileReader.onload = (e) => resolve(e.target.result);
+          fileReader.onerror = () => resolve('');
+          fileReader.readAsDataURL(file);
+        });
+      }
+
       if (clientDataUri) {
         setPreviewUrl(clientDataUri);
       }
 
-      const res = await uploadAPI.uploadFile(file);
-      const chosenUrl = (res && res.success && res.fileUrl) ? res.fileUrl : clientDataUri;
+      // Upload to server
+      let chosenUrl = clientDataUri;
+      try {
+        const res = await uploadAPI.uploadFile(file);
+        if (res && res.success && res.localUrl) {
+          chosenUrl = res.localUrl;
+        }
+      } catch (uploadErr) {
+        console.warn('Server upload fallback to clientDataUri:', uploadErr.message);
+      }
 
       setFileInfo({
         name: file.name,
@@ -68,28 +115,11 @@ const FileUpload = ({
         type: file.type.includes('pdf') ? 'pdf' : 'image',
         url: chosenUrl,
       });
-      setPreviewUrl(chosenUrl);
+      setPreviewUrl(clientDataUri || chosenUrl);
       onChange(chosenUrl);
-
-      if (!res || !res.success) {
-        console.warn('Server upload fallback to client DataURI:', res?.message);
-      }
     } catch (err) {
-      console.warn('Network upload fallback to client DataURI:', err.message);
-      // Fallback to clientDataUri
-      const clientDataUri = await readAsDataUrlPromise;
-      if (clientDataUri) {
-        setFileInfo({
-          name: file.name,
-          size: (file.size / (1024 * 1024)).toFixed(2) + ' MB',
-          type: file.type.includes('pdf') ? 'pdf' : 'image',
-          url: clientDataUri,
-        });
-        setPreviewUrl(clientDataUri);
-        onChange(clientDataUri);
-      } else {
-        setError('Failed to process file. Please try again.');
-      }
+      console.warn('File processing warning:', err.message);
+      setError('Failed to process document. Please try again.');
     } finally {
       setUploading(false);
     }
