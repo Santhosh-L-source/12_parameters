@@ -79,9 +79,17 @@ const CodingProblems = () => {
       });
       setUrls((prev) => ({ ...prev, ...urlMap }));
 
+      const verifiedList = list.filter((item) => item.status === 'VERIFIED');
+      const totalFromList = verifiedList.reduce((sum, item) => sum + (item.total_solved || 0), 0);
+      const sqlFromList = verifiedList.reduce((sum, item) => sum + (item.sql_solved || 0), 0);
+
       setStats({
-        totalSolved: marksRes?.total_solved_sum || marksRes?.total_solved || 0,
-        sqlSolved: marksRes?.sql_solved_sum || marksRes?.sql_solved || 0,
+        totalSolved: (marksRes?.total_solved_sum !== undefined && marksRes?.total_solved_sum !== null)
+          ? marksRes.total_solved_sum
+          : totalFromList,
+        sqlSolved: (marksRes?.sql_solved_sum !== undefined && marksRes?.sql_solved_sum !== null)
+          ? marksRes.sql_solved_sum
+          : sqlFromList,
         marks: marksRes?.marks || 0,
         maxMarks: 25,
       });

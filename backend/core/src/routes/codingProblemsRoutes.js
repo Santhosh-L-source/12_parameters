@@ -639,25 +639,7 @@ router.get(
       const { studentId } = req.params;
       const canonicalRoll = await resolveStudentRoll(studentId);
 
-      // 1. Check scores table first
-      const scoreRows = await sequelize.query(
-        `SELECT marks FROM scores 
-         WHERE LOWER(roll_number) = LOWER(:canonicalRoll)
-           AND parameter_id IN ('coding', 'coding_problems', 'coding_score')
-         ORDER BY marks DESC LIMIT 1`,
-        { replacements: { canonicalRoll }, type: sequelize.QueryTypes.SELECT }
-      );
-
-      if (scoreRows && scoreRows.length > 0 && parseFloat(scoreRows[0].marks) > 0) {
-        return res.json({
-          success: true,
-          student_id: canonicalRoll,
-          marks: parseFloat(scoreRows[0].marks),
-          max_marks: 25
-        });
-      }
-
-      // 2. Check evidence table
+      // Calculate from evidence table
       const allEvidence = await sequelize.query(
         `SELECT platform, username, total_solved, sql_solved FROM coding_problems_evidence
          WHERE LOWER(roll_number) = LOWER(:canonicalRoll) AND status = 'VERIFIED'`,
@@ -666,7 +648,20 @@ router.get(
 
       const totalSolved = (allEvidence || []).reduce((sum, e) => sum + (e.total_solved || 0), 0);
       const sqlSolved = (allEvidence || []).reduce((sum, e) => sum + (e.sql_solved || 0), 0);
-      const marks = calculateCodingProblemsMarks(totalSolved, sqlSolved);
+      const calculatedMarks = calculateCodingProblemsMarks(totalSolved, sqlSolved);
+
+      // Check scores table
+      const scoreRows = await sequelize.query(
+        `SELECT marks FROM scores 
+         WHERE LOWER(roll_number) = LOWER(:canonicalRoll)
+           AND parameter_id IN ('coding', 'coding_problems', 'coding_score')
+         ORDER BY marks DESC LIMIT 1`,
+        { replacements: { canonicalRoll }, type: sequelize.QueryTypes.SELECT }
+      );
+
+      const marks = (scoreRows && scoreRows.length > 0 && parseFloat(scoreRows[0].marks) > 0)
+        ? parseFloat(scoreRows[0].marks)
+        : calculatedMarks;
 
       res.json({
         success: true,
