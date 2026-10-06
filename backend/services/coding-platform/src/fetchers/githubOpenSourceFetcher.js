@@ -173,34 +173,8 @@ async function fetchGitHubOpenSourceStats(urlOrHandle, expectedAuthor = null) {
     }
   }
 
-  // Strategy 3: Check User Repositories & Maintainer status via User Profile API / Cheerio
-  try {
-    const userRes = await axios.get(`https://api.github.com/users/${encodeURIComponent(username)}`, {
-      headers,
-      timeout: 8000,
-      validateStatus: (s) => s < 500,
-    });
-
-    if (userRes.status === 200 && userRes.data) {
-      const publicRepos = userRes.data.public_repos || 0;
-      if (publicRepos >= 3) {
-        isMaintainer = true;
-      }
-    }
-  } catch (err) {
-    // Strategy 4: Fallback to Cheerio profile scrape
-    try {
-      const pageRes = await axios.get(`https://github.com/${encodeURIComponent(username)}`, {
-        headers: { 'User-Agent': headers['User-Agent'] },
-        timeout: 8000
-      });
-      const $ = cheerio.load(pageRes.data);
-      const pinned = $('.pinned-item-list-item-content span.repo').length;
-      if (pinned >= 2) isMaintainer = true;
-    } catch (scrapeErr) {
-      logger.warn(`Cheerio GitHub profile scrape warning: ${scrapeErr.message}`);
-    }
-  }
+  // isMaintainer defaults to false unless verified or specified
+  isMaintainer = false;
 
   prsSubmitted = Math.max(prsSubmitted, prsMerged);
 
