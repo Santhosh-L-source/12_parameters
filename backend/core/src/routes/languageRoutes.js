@@ -138,10 +138,29 @@ router.post(
       );
 
       if (existing.length > 0) {
-        return res.status(409).json({
-          success: false,
-          error: 'Duplicate submission',
-          message: `You have already submitted evidence for ${language} at ${level} level`
+        const existingId = existing[0].id;
+        await sequelize.query(
+          `UPDATE language_evidence
+           SET certificate_url = COALESCE(:certificateUrl, certificate_url),
+               status = 'PENDING',
+               submitted_at = NOW()
+           WHERE id = :existingId`,
+          {
+            replacements: { existingId, certificateUrl },
+            type: sequelize.QueryTypes.UPDATE
+          }
+        );
+
+        return res.status(200).json({
+          success: true,
+          message: `Language evidence for ${language} (${level}) updated successfully`,
+          evidence: {
+            id: existingId,
+            language,
+            proficiency_level: level,
+            status: 'PENDING',
+            submitted_at: new Date()
+          }
         });
       }
 

@@ -185,10 +185,47 @@ router.post(
       );
 
       if (existing.length > 0) {
-        return res.status(409).json({
-          success: false,
-          error: 'Duplicate submission',
-          message: `You have already submitted evidence for ${exam_type} ${exam_year || ''}`
+        const existingId = existing[0].id;
+        await sequelize.query(
+          `UPDATE gate_exam_evidence
+           SET tests_completed = COALESCE(:tests_completed, tests_completed),
+               full_length_tests = COALESCE(:full_length_tests, full_length_tests),
+               average_score_percent = COALESCE(:average_score_percent, average_score_percent),
+               diagnostic_completed = COALESCE(:diagnostic_completed, diagnostic_completed),
+               official_appearance = COALESCE(:official_appearance, official_appearance),
+               qualified = COALESCE(:qualified, qualified),
+               gate_score = COALESCE(:gate_score, gate_score),
+               branch_code = COALESCE(:branch_code, branch_code),
+               certificate_url = COALESCE(:certificate_url, certificate_url),
+               status = 'PENDING',
+               submitted_at = NOW()
+           WHERE id = :existingId`,
+          {
+            replacements: {
+              existingId,
+              tests_completed: tests_completed || 0,
+              full_length_tests: full_length_tests || 0,
+              average_score_percent: average_score_percent || null,
+              diagnostic_completed: diagnostic_completed || false,
+              official_appearance: official_appearance || false,
+              qualified: qualified || false,
+              gate_score: gate_score || null,
+              branch_code: branch_code || null,
+              certificate_url: certificate_url || null
+            },
+            type: sequelize.QueryTypes.UPDATE
+          }
+        );
+
+        return res.status(200).json({
+          success: true,
+          message: `Exam evidence for ${exam_type} updated successfully`,
+          evidence: {
+            id: existingId,
+            exam_type,
+            status: 'PENDING',
+            submitted_at: new Date()
+          }
         });
       }
 

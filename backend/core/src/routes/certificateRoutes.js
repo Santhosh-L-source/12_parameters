@@ -136,10 +136,39 @@ router.post(
       );
 
       if (existing.length > 0) {
-        return res.status(409).json({
-          success: false,
-          error: 'Duplicate submission',
-          message: `You have already submitted evidence for "${certName}". To update, contact your mentor.`
+        const existingId = existing[0].id;
+        await sequelize.query(
+          `UPDATE certificate_evidence
+           SET category = COALESCE(:category, category),
+               issuing_body = COALESCE(:issuingBody, issuing_body),
+               grade_or_score = COALESCE(:gradeOrScore, grade_or_score),
+               certificate_url = COALESCE(:certificateUrl, certificate_url),
+               status = 'PENDING',
+               submitted_at = NOW()
+           WHERE id = :existingId`,
+          {
+            replacements: {
+              existingId,
+              category,
+              issuingBody,
+              gradeOrScore,
+              certificateUrl
+            },
+            type: sequelize.QueryTypes.UPDATE
+          }
+        );
+
+        return res.status(200).json({
+          success: true,
+          message: `Certificate "${certName}" updated successfully`,
+          evidence: {
+            id: existingId,
+            credential_name: certName,
+            credential_category: category,
+            tier_level: gradeOrScore,
+            status: 'PENDING',
+            submitted_at: new Date()
+          }
         });
       }
 

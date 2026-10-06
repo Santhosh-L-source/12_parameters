@@ -78,8 +78,26 @@ const handleSubmit = async (req, res, next) => {
   try {
     const studentRoll = req.user.roll_number || req.user.id_number;
     const title = (req.body.title || req.body.output_name || req.body.outputName || '').trim();
-    const type = (req.body.type || req.body.achievement_type || req.body.achievementType || 'PROJECT').toUpperCase();
-    const description = req.body.description || req.body.achievement_stage || null;
+    const rawType = (req.body.type || req.body.achievement_type || req.body.achievementType || 'PROJECT').toUpperCase();
+    let mappedType = 'PROJECT';
+    if (rawType.includes('PATENT')) {
+      mappedType = 'PATENT';
+    } else if (
+      rawType.includes('PUB') ||
+      rawType.includes('JOURNAL') ||
+      rawType.includes('CONFERENCE') ||
+      rawType.includes('SCOPUS') ||
+      rawType.includes('SCI') ||
+      rawType.includes('IEEE')
+    ) {
+      mappedType = 'PUBLICATION';
+    } else if (rawType.includes('CAPSTONE')) {
+      mappedType = 'CAPSTONE';
+    } else {
+      mappedType = 'PROJECT';
+    }
+
+    const description = req.body.description || req.body.achievement_stage || rawType || null;
     const githubRepoUrl = req.body.github_repo_url || req.body.proof_url || req.body.proofUrl || null;
     const liveDemoUrl = req.body.live_demo_url || null;
     const paperDoi = req.body.paper_doi_or_patent_no || null;
@@ -103,10 +121,40 @@ const handleSubmit = async (req, res, next) => {
     );
 
     if (existing.length > 0) {
-      return res.status(409).json({
-        success: false,
-        error: 'Duplicate submission',
-        message: `You have already submitted evidence for "${title}". To update, contact your mentor.`
+      const existingId = existing[0].id;
+      await sequelize.query(
+        `UPDATE project_evidence
+         SET type = COALESCE(:type, type),
+             description = COALESCE(:description, description),
+             github_repo_url = COALESCE(:githubRepoUrl, github_repo_url),
+             live_demo_url = COALESCE(:liveDemoUrl, live_demo_url),
+             paper_doi_or_patent_no = COALESCE(:paperDoi, paper_doi_or_patent_no),
+             status = 'PENDING',
+             submitted_at = NOW()
+         WHERE id = :existingId`,
+        {
+          replacements: {
+            existingId,
+            type: mappedType || 'PROJECT',
+            description: description || null,
+            githubRepoUrl: githubRepoUrl || null,
+            liveDemoUrl: liveDemoUrl || null,
+            paperDoi: paperDoi || null
+          },
+          type: sequelize.QueryTypes.UPDATE
+        }
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: `Project evidence for "${title}" updated successfully`,
+        evidence: {
+          id: existingId,
+          title,
+          type: mappedType,
+          status: 'PENDING',
+          submitted_at: new Date()
+        }
       });
     }
 
@@ -122,11 +170,11 @@ const handleSubmit = async (req, res, next) => {
           canonicalRoll,
           distinctKey,
           title,
-          type,
-          description,
-          githubRepoUrl,
-          liveDemoUrl,
-          paperDoi
+          type: mappedType || 'PROJECT',
+          description: description || null,
+          githubRepoUrl: githubRepoUrl || null,
+          liveDemoUrl: liveDemoUrl || null,
+          paperDoi: paperDoi || null
         },
         type: sequelize.QueryTypes.INSERT
       }

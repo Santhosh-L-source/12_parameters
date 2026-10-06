@@ -133,10 +133,31 @@ router.post(
       );
 
       if (existing.length > 0) {
-        return res.status(409).json({
-          success: false,
-          error: 'Duplicate submission',
-          message: `You have already submitted evidence for "${eventName}". To update, contact your mentor.`
+        const existingId = existing[0].id;
+        await sequelize.query(
+          `UPDATE competition_evidence
+           SET level = COALESCE(:level, level),
+               position = COALESCE(:position, position),
+               certificate_url = COALESCE(:certificateUrl, certificate_url),
+               status = 'PENDING',
+               submitted_at = NOW()
+           WHERE id = :existingId`,
+          {
+            replacements: { existingId, level, position, certificateUrl },
+            type: sequelize.QueryTypes.UPDATE
+          }
+        );
+
+        return res.status(200).json({
+          success: true,
+          message: `Competition evidence for "${eventName}" updated successfully`,
+          evidence: {
+            id: existingId,
+            event_name: eventName,
+            round_cleared: level,
+            status: 'PENDING',
+            submitted_at: new Date()
+          }
         });
       }
 
