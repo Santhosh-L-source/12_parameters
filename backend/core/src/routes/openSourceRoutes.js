@@ -226,7 +226,7 @@ router.post(
 
       await sequelize.query(
         `INSERT INTO scores (roll_number, parameter_id, marks, semester, provisional, calculated_at)
-         VALUES (:canonicalRoll, 'open_source', :finalMarks, 1, false, NOW())
+         VALUES (:canonicalRoll, 'opensource', :finalMarks, 1, false, NOW())
          ON CONFLICT (roll_number, parameter_id, semester)
          DO UPDATE SET marks = EXCLUDED.marks, provisional = false, calculated_at = NOW()`,
         { replacements: { canonicalRoll, finalMarks }, type: sequelize.QueryTypes.INSERT }
@@ -323,7 +323,7 @@ router.post(
 
       await sequelize.query(
         `INSERT INTO scores (roll_number, parameter_id, marks, semester, provisional, calculated_at)
-         VALUES (:canonicalRoll, 'open_source', :finalMarks, 1, false, NOW())
+         VALUES (:canonicalRoll, 'opensource', :finalMarks, 1, false, NOW())
          ON CONFLICT (roll_number, parameter_id, semester)
          DO UPDATE SET marks = EXCLUDED.marks, provisional = false, calculated_at = NOW()`,
         { replacements: { canonicalRoll, finalMarks }, type: sequelize.QueryTypes.INSERT }
@@ -480,7 +480,7 @@ router.post(
 
       await sequelize.query(
         `INSERT INTO scores (roll_number, parameter_id, marks, semester, provisional, calculated_at)
-         VALUES (:canonicalRoll, 'open_source', :finalMarks, 1, false, NOW())
+         VALUES (:canonicalRoll, 'opensource', :finalMarks, 1, false, NOW())
          ON CONFLICT (roll_number, parameter_id, semester)
          DO UPDATE SET marks = EXCLUDED.marks, provisional = false, calculated_at = NOW()`,
         { replacements: { canonicalRoll, finalMarks }, type: sequelize.QueryTypes.INSERT }
@@ -701,7 +701,7 @@ router.post(
 
         await sequelize.query(
           `INSERT INTO scores (roll_number, parameter_id, marks, semester, provisional, calculated_at)
-           VALUES (:studentRoll, 'open_source', :finalMarks, 1, false, NOW())
+           VALUES (:studentRoll, 'opensource', :finalMarks, 1, false, NOW())
            ON CONFLICT (roll_number, parameter_id, semester)
            DO UPDATE SET marks = EXCLUDED.marks, provisional = false, calculated_at = NOW()`,
           { replacements: { studentRoll, finalMarks }, type: sequelize.QueryTypes.INSERT }

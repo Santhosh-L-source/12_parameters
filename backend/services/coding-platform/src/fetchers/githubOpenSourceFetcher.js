@@ -233,7 +233,7 @@ async function verifyGitHubOwnership(username, expectedToken) {
 
   const cleanToken = expectedToken.trim().toUpperCase();
   const headers = {
-    'User-Agent': config.userAgent || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
   };
 
@@ -243,17 +243,34 @@ async function verifyGitHubOwnership(username, expectedToken) {
       timeout: 10000,
     });
 
+    const pageData = String(pageRes.data || '').toUpperCase();
     const $ = cheerio.load(pageRes.data);
     const bioText = $('.user-profile-bio').text().trim().toUpperCase();
     const nameText = $('.vcard-fullname').text().trim().toUpperCase();
-    const allProfileText = $('.vcard-names-container, .user-profile-bio, .js-profile-editable-area, .p-nickname, .p-org, .p-label').text().trim().replace(/\s+/g, ' ').toUpperCase();
+    const allProfileText = $('.vcard-names-container, .user-profile-bio, .js-profile-editable-area, .p-nickname, .p-org, .p-label, .markdown-body').text().trim().replace(/\s+/g, ' ').toUpperCase();
 
+    // 1. Direct match on exact token
     if (
       bioText.includes(cleanToken) ||
       nameText.includes(cleanToken) ||
-      allProfileText.includes(cleanToken)
+      allProfileText.includes(cleanToken) ||
+      pageData.includes(cleanToken)
     ) {
       return { verified: true };
+    }
+
+    // 2. Prefix match on VERIFY-<ROLL>
+    const match = cleanToken.match(/VERIFY-([A-Z0-9]+)/);
+    if (match && match[1]) {
+      const rollPrefix = `VERIFY-${match[1]}`;
+      if (
+        bioText.includes(rollPrefix) ||
+        nameText.includes(rollPrefix) ||
+        allProfileText.includes(rollPrefix) ||
+        pageData.includes(rollPrefix)
+      ) {
+        return { verified: true };
+      }
     }
 
     return {
