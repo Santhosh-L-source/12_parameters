@@ -11,6 +11,17 @@ const { body, param } = require('express-validator');
 const { authenticate } = require('../middleware/auth');
 const sequelize = require('../config/database');
 
+let fetchLeetCodeRating, fetchCodeforcesRating, fetchCodeChefRating, fetchAtCoderRating;
+try {
+  const rf = require('../../../services/coding-platform/src/fetchers/ratingFetcher');
+  fetchLeetCodeRating = rf.fetchLeetCodeRating;
+  fetchCodeforcesRating = rf.fetchCodeforcesRating;
+  fetchCodeChefRating = rf.fetchCodeChefRating;
+  fetchAtCoderRating = rf.fetchAtCoderRating;
+} catch (e) {
+  console.warn('[CP_RATING] Initial ratingFetcher require warning:', e.message);
+}
+
 const router = express.Router();
 
 function validate(req, res, next) {
@@ -57,6 +68,12 @@ async function updateStudentProfileScore(rollNumber) {
          FROM scores 
          WHERE LOWER(roll_number) = LOWER(:rollNumber)
        ),
+       coding_score = (
+         SELECT COALESCE(SUM(marks), 0) 
+         FROM scores 
+         WHERE LOWER(roll_number) = LOWER(:rollNumber)
+           AND parameter_id IN ('coding', 'coding_problems', 'cp', 'cp_rating', 'month', 'monthly_coding', 'hundred_days')
+       ),
        updated_at = NOW()
        WHERE LOWER(roll_number) = LOWER(:rollNumber)`,
       {
@@ -70,36 +87,42 @@ async function updateStudentProfileScore(rollNumber) {
 }
 
 /**
- * Calculate marks for a platform rating
+ * Calculate marks for a platform rating (single best threshold)
  */
 function calculatePlatformMarks(platform, rating) {
   const r = parseInt(rating) || 0;
   const p = (platform || '').toUpperCase();
 
   if (p.includes('CODEFORCES')) {
-    if (r >= 1900) return 20;
-    if (r >= 1600) return 15;
-    if (r >= 1400) return 10;
-    if (r >= 1200) return 5;
-    return 0;
+    if (r >= 1800) return { marks: 20, tier: 'Expert' };
+    if (r >= 1600) return { marks: 15, tier: 'Specialist' };
+    if (r >= 1400) return { marks: 10, tier: 'Pupil' };
+    if (r >= 1200) return { marks: 5, tier: 'Newbie' };
+    return { marks: 0, tier: 'Unrated' };
   } else if (p.includes('CODECHEF')) {
-    if (r >= 2000) return 20;
-    if (r >= 1800) return 15;
-    if (r >= 1600) return 10;
-    if (r >= 1400) return 5;
-    return 0;
+    if (r >= 2000) return { marks: 20, tier: '5★' };
+    if (r >= 1800) return { marks: 15, tier: '4★' };
+    if (r >= 1600) return { marks: 10, tier: '3★' };
+    if (r >= 1400) return { marks: 5, tier: '2★' };
+    return { marks: 0, tier: 'Unrated' };
   } else if (p.includes('LEETCODE')) {
-    if (r >= 2100) return 20;
-    if (r >= 1850) return 15;
-    if (r >= 1650) return 10;
-    if (r >= 1500) return 5;
-    return 0;
+    if (r >= 2000) return { marks: 20, tier: 'Knight' };
+    if (r >= 1800) return { marks: 15, tier: 'Guardian' };
+    if (r >= 1600) return { marks: 10, tier: 'Intermediate' };
+    if (r >= 1400) return { marks: 5, tier: 'Beginner' };
+    return { marks: 0, tier: 'Unrated' };
+  } else if (p.includes('ATCODER')) {
+    if (r >= 1600) return { marks: 20, tier: 'Blue' };
+    if (r >= 1200) return { marks: 15, tier: 'Cyan' };
+    if (r >= 800) return { marks: 10, tier: 'Green' };
+    if (r >= 400) return { marks: 5, tier: 'Brown' };
+    return { marks: 0, tier: 'Unrated' };
   } else {
-    if (r >= 1600) return 20;
-    if (r >= 1400) return 15;
-    if (r >= 1200) return 10;
-    if (r >= 1000) return 5;
-    return 0;
+    if (r >= 1600) return { marks: 20, tier: 'Tier 1' };
+    if (r >= 1200) return { marks: 15, tier: 'Tier 2' };
+    if (r >= 800) return { marks: 10, tier: 'Tier 3' };
+    if (r >= 400) return { marks: 5, tier: 'Tier 4' };
+    return { marks: 0, tier: 'Unrated' };
   }
 }
 
@@ -203,13 +226,13 @@ router.post(
       let bestMarks = 0;
       for (const e of allVerified) {
         const ratingToUse = Math.max(e.current_rating || 0, e.max_rating || 0);
-        const marks = calculatePlatformMarks(e.platform, ratingToUse);
+        const { marks } = calculatePlatformMarks(e.platform, ratingToUse);
         if (marks > bestMarks) bestMarks = marks;
       }
 
       await sequelize.query(
         `INSERT INTO scores (roll_number, parameter_id, marks, semester, provisional, calculated_at)
-         VALUES (:canonicalRoll, 'cp', :bestMarks, 1, false, NOW())
+         VALUES (:canonicalRoll, 'cp_rating', :bestMarks, 1, false, NOW())
          ON CONFLICT (roll_number, parameter_id, semester)
          DO UPDATE SET marks = EXCLUDED.marks, provisional = false, calculated_at = NOW()`,
         { replacements: { canonicalRoll, bestMarks }, type: sequelize.QueryTypes.INSERT }
@@ -229,6 +252,150 @@ router.post(
     }
   }
 );
+
+/**
+ * POST /api/cp-rating/sync-from-coding-platforms
+ */
+const handleSyncRatings = async (req, res, next) => {
+  try {
+    const studentRoll = req.user.roll_number || req.user.id_number;
+    const canonicalRoll = await resolveStudentRoll(studentRoll);
+
+    // Get all verified coding platform profiles
+    const verifiedCoding = await sequelize.query(
+      `SELECT platform, username, profile_url FROM coding_problems_evidence
+       WHERE LOWER(roll_number) = LOWER(:canonicalRoll) AND status = 'VERIFIED'`,
+      { replacements: { canonicalRoll }, type: sequelize.QueryTypes.SELECT }
+    );
+
+    if (!fetchLeetCodeRating) {
+      try {
+        const rf = require('../../../services/coding-platform/src/fetchers/ratingFetcher');
+        fetchLeetCodeRating = rf.fetchLeetCodeRating;
+        fetchCodeforcesRating = rf.fetchCodeforcesRating;
+        fetchCodeChefRating = rf.fetchCodeChefRating;
+        fetchAtCoderRating = rf.fetchAtCoderRating;
+      } catch (e) {}
+    }
+
+    const syncedList = [];
+    let bestMarks = 0;
+    let bestRating = 0;
+    let bestPlatform = null;
+    let bestTier = null;
+
+    for (const item of verifiedCoding) {
+      const plat = (item.platform || '').toUpperCase();
+      const url = item.profile_url || item.username;
+      let fetchedRating = 0;
+
+      if (plat === 'LEETCODE' && fetchLeetCodeRating) {
+        fetchedRating = await fetchLeetCodeRating(url);
+      } else if (plat === 'CODEFORCES' && fetchCodeforcesRating) {
+        fetchedRating = await fetchCodeforcesRating(url);
+      } else if (plat === 'CODECHEF' && fetchCodeChefRating) {
+        fetchedRating = await fetchCodeChefRating(url);
+      } else if (plat === 'ATCODER' && fetchAtCoderRating) {
+        fetchedRating = await fetchAtCoderRating(url);
+      }
+
+      if (['LEETCODE', 'CODEFORCES', 'CODECHEF', 'ATCODER'].includes(plat)) {
+        const { marks, tier } = calculatePlatformMarks(plat, fetchedRating);
+        const distinct_key = `${plat}:${item.username}`;
+        const distinct_key_norm = distinct_key.toLowerCase().trim();
+
+        const existing = await sequelize.query(
+          `SELECT id FROM cp_rating_evidence
+           WHERE LOWER(roll_number) = LOWER(:canonicalRoll) 
+             AND (distinct_key_normalized = :distinct_key_norm OR UPPER(platform) = :plat)`,
+          { replacements: { canonicalRoll, distinct_key_norm, plat }, type: sequelize.QueryTypes.SELECT }
+        );
+
+        if (existing.length > 0) {
+          await sequelize.query(
+            `UPDATE cp_rating_evidence
+             SET current_rating = :fetchedRating,
+                 max_rating = :fetchedRating,
+                 profile_url = :url,
+                 handle = :handle,
+                 status = 'VERIFIED',
+                 verified_at = NOW()
+             WHERE id = :id`,
+            {
+              replacements: {
+                id: existing[0].id,
+                fetchedRating,
+                url,
+                handle: item.username
+              },
+              type: sequelize.QueryTypes.UPDATE
+            }
+          );
+        } else {
+          await sequelize.query(
+            `INSERT INTO cp_rating_evidence
+             (roll_number, platform, handle, distinct_key, current_rating, max_rating, profile_url, status, submitted_at, verified_at)
+             VALUES (:canonicalRoll, :plat, :handle, :distinct_key, :fetchedRating, :fetchedRating, :url, 'VERIFIED', NOW(), NOW())`,
+            {
+              replacements: {
+                canonicalRoll,
+                plat,
+                handle: item.username,
+                distinct_key,
+                fetchedRating,
+                url
+              },
+              type: sequelize.QueryTypes.INSERT
+            }
+          );
+        }
+
+        syncedList.push({
+          platform: plat,
+          username: item.username,
+          current_rating: fetchedRating,
+          max_rating: fetchedRating,
+          marks,
+          tier
+        });
+
+        if (marks > bestMarks || (marks === bestMarks && fetchedRating > bestRating)) {
+          bestMarks = marks;
+          bestRating = fetchedRating;
+          bestPlatform = plat;
+          bestTier = tier;
+        }
+      }
+    }
+
+    // Save single best into scores table
+    await sequelize.query(
+      `INSERT INTO scores (roll_number, parameter_id, marks, semester, provisional, calculated_at)
+       VALUES (:canonicalRoll, 'cp_rating', :bestMarks, 1, false, NOW())
+       ON CONFLICT (roll_number, parameter_id, semester)
+       DO UPDATE SET marks = EXCLUDED.marks, provisional = false, calculated_at = NOW()`,
+      { replacements: { canonicalRoll, bestMarks }, type: sequelize.QueryTypes.INSERT }
+    );
+
+    await updateStudentProfileScore(canonicalRoll);
+
+    res.json({
+      success: true,
+      message: `CP ratings synced successfully! Best: ${bestPlatform || 'None'} (${bestRating} rating, ${bestMarks}/20 marks)`,
+      marks: bestMarks,
+      best_rating: bestRating,
+      best_platform: bestPlatform,
+      best_tier: bestTier,
+      platforms: syncedList
+    });
+  } catch (err) {
+    console.error('[CP_RATING] Sync ratings error:', err.message);
+    next(err);
+  }
+};
+
+router.post('/sync-from-coding-platforms', authenticate, handleSyncRatings);
+router.post('/sync', authenticate, handleSyncRatings);
 
 /**
  * GET /api/cp-rating/student/:studentId
@@ -408,13 +575,13 @@ router.post(
         let bestMarks = 0;
         for (const e of allVerified) {
           const ratingToUse = Math.max(e.current_rating || 0, e.max_rating || 0);
-          const marks = calculatePlatformMarks(e.platform, ratingToUse);
+          const { marks } = calculatePlatformMarks(e.platform, ratingToUse);
           if (marks > bestMarks) bestMarks = marks;
         }
 
         await sequelize.query(
           `INSERT INTO scores (roll_number, parameter_id, marks, semester, provisional, calculated_at)
-           VALUES (:studentRoll, 'cp', :bestMarks, 1, false, NOW())
+           VALUES (:studentRoll, 'cp_rating', :bestMarks, 1, false, NOW())
            ON CONFLICT (roll_number, parameter_id, semester)
            DO UPDATE SET marks = EXCLUDED.marks, provisional = false, calculated_at = NOW()`,
           { replacements: { studentRoll, bestMarks }, type: sequelize.QueryTypes.INSERT }
@@ -444,7 +611,39 @@ router.get(
       const { studentId } = req.params;
       const canonicalRoll = await resolveStudentRoll(studentId);
 
-      // 1. Check scores table first
+      // Check evidence table
+      const allVerified = await sequelize.query(
+        `SELECT platform, handle, current_rating, max_rating FROM cp_rating_evidence
+         WHERE LOWER(roll_number) = LOWER(:canonicalRoll) AND status = 'VERIFIED'
+         ORDER BY current_rating DESC`,
+        { replacements: { canonicalRoll }, type: sequelize.QueryTypes.SELECT }
+      );
+
+      let bestMarks = 0;
+      let bestRating = 0;
+      let bestPlatform = null;
+      let bestTier = null;
+
+      const platforms = (allVerified || []).map((e) => {
+        const ratingToUse = Math.max(e.current_rating || 0, e.max_rating || 0);
+        const { marks, tier } = calculatePlatformMarks(e.platform, ratingToUse);
+        if (marks > bestMarks || (marks === bestMarks && ratingToUse > bestRating)) {
+          bestMarks = marks;
+          bestRating = ratingToUse;
+          bestPlatform = e.platform;
+          bestTier = tier;
+        }
+        return {
+          platform: e.platform,
+          username: e.handle,
+          current_rating: e.current_rating || 0,
+          max_rating: e.max_rating || e.current_rating || 0,
+          marks,
+          tier
+        };
+      });
+
+      // Check scores table as well
       const scoreRows = await sequelize.query(
         `SELECT marks FROM scores 
          WHERE LOWER(roll_number) = LOWER(:canonicalRoll)
@@ -453,36 +652,20 @@ router.get(
         { replacements: { canonicalRoll }, type: sequelize.QueryTypes.SELECT }
       );
 
-      if (scoreRows && scoreRows.length > 0 && parseFloat(scoreRows[0].marks) > 0) {
-        return res.json({
-          success: true,
-          student_id: canonicalRoll,
-          marks: parseFloat(scoreRows[0].marks),
-          max_marks: 20
-        });
-      }
-
-      // 2. Check evidence table
-      const allVerified = await sequelize.query(
-        `SELECT platform, current_rating, max_rating FROM cp_rating_evidence
-         WHERE LOWER(roll_number) = LOWER(:canonicalRoll) AND status = 'VERIFIED'`,
-        { replacements: { canonicalRoll }, type: sequelize.QueryTypes.SELECT }
-      );
-
-      let bestMarks = 0;
-      for (const e of allVerified) {
-        const ratingToUse = Math.max(e.current_rating || 0, e.max_rating || 0);
-        const marks = calculatePlatformMarks(e.platform, ratingToUse);
-        if (marks > bestMarks) bestMarks = marks;
-      }
+      const finalMarks = (scoreRows && scoreRows.length > 0 && parseFloat(scoreRows[0].marks) > 0)
+        ? parseFloat(scoreRows[0].marks)
+        : bestMarks;
 
       res.json({
         success: true,
         student_id: canonicalRoll,
-        marks: bestMarks,
+        marks: finalMarks,
+        best_rating: bestRating,
+        best_platform: bestPlatform,
+        best_tier: bestTier,
         max_marks: 20,
-        platforms_count: allVerified ? allVerified.length : 0,
-        platforms: allVerified || []
+        platforms_count: platforms.length,
+        platforms
       });
     } catch (err) {
       console.error('[CP_RATING] Calculate marks error:', err.message);
