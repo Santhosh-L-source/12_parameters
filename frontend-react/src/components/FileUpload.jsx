@@ -44,32 +44,52 @@ const FileUpload = ({
       return;
     }
 
-    // Generate immediate client-side preview URL
-    try {
-      const localBlobUrl = URL.createObjectURL(file);
-      setPreviewUrl(localBlobUrl);
-    } catch (blobErr) {
-      console.warn('Blob preview warning:', blobErr);
-    }
+    // Read file via FileReader as robust client-side Data URL
+    const fileReader = new FileReader();
+    const readAsDataUrlPromise = new Promise((resolve) => {
+      fileReader.onload = (e) => resolve(e.target.result);
+      fileReader.onerror = () => resolve('');
+    });
+    fileReader.readAsDataURL(file);
 
     setUploading(true);
     try {
+      const clientDataUri = await readAsDataUrlPromise;
+      if (clientDataUri) {
+        setPreviewUrl(clientDataUri);
+      }
+
       const res = await uploadAPI.uploadFile(file);
-      if (res.success && res.fileUrl) {
-        const fullUrl = res.fileUrl;
+      const chosenUrl = (res && res.success && res.fileUrl) ? res.fileUrl : clientDataUri;
+
+      setFileInfo({
+        name: file.name,
+        size: (file.size / (1024 * 1024)).toFixed(2) + ' MB',
+        type: file.type.includes('pdf') ? 'pdf' : 'image',
+        url: chosenUrl,
+      });
+      setPreviewUrl(chosenUrl);
+      onChange(chosenUrl);
+
+      if (!res || !res.success) {
+        console.warn('Server upload fallback to client DataURI:', res?.message);
+      }
+    } catch (err) {
+      console.warn('Network upload fallback to client DataURI:', err.message);
+      // Fallback to clientDataUri
+      const clientDataUri = await readAsDataUrlPromise;
+      if (clientDataUri) {
         setFileInfo({
           name: file.name,
           size: (file.size / (1024 * 1024)).toFixed(2) + ' MB',
           type: file.type.includes('pdf') ? 'pdf' : 'image',
-          url: fullUrl,
+          url: clientDataUri,
         });
-        setPreviewUrl(fullUrl);
-        onChange(fullUrl);
+        setPreviewUrl(clientDataUri);
+        onChange(clientDataUri);
       } else {
-        setError(res.message || 'Upload failed. Please try again.');
+        setError('Failed to process file. Please try again.');
       }
-    } catch (err) {
-      setError(err.message || 'Network error during upload.');
     } finally {
       setUploading(false);
     }

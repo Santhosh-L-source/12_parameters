@@ -243,7 +243,7 @@ async function exportScores(req, res) {
       'register_number,student_name,in_pep,in_hope_non_elite,in_hope_elite,awarded_mark,awarded_category,last_calculated_at',
       ...rows.map(r =>
         [r.register_number, `"${r.student_name}"`, r.in_pep, r.in_hope_non_elite, r.in_hope_elite,
-          r.awarded_mark, `"${r.awarded_category}"`, r.last_calculated_at].join(',')
+        r.awarded_mark, `"${r.awarded_category}"`, r.last_calculated_at].join(',')
       )
     ].join('\n');
 

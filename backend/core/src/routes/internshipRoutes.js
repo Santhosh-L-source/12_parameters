@@ -101,6 +101,9 @@ router.post(
     body('company_name').optional({ checkFalsy: true }).isString(),
     body('startup_name').optional({ checkFalsy: true }).isString(),
     body('role').optional({ checkFalsy: true }).isString(),
+    body('recruitment_stage').optional({ checkFalsy: true }).isString(),
+    body('startup_stage').optional({ checkFalsy: true }).isString(),
+    body('stage').optional({ checkFalsy: true }).isString(),
     body('duration_months').optional(),
     body('monthly_stipend').optional(),
     body('is_startup').optional().isBoolean(),
@@ -115,6 +118,9 @@ router.post(
         company_name,
         startup_name,
         role,
+        recruitment_stage,
+        startup_stage,
+        stage,
         duration_months,
         monthly_stipend,
         is_startup,
@@ -135,9 +141,13 @@ router.post(
       const distinctKey = entityName;
       const distinctKeyNorm = distinctKey.toLowerCase().trim();
       const isStartup = Boolean(is_startup || startup_name);
+      const finalRole = role || recruitment_stage || startup_stage || stage || (isStartup ? 'FOUNDER' : 'INTERN');
+
+      const parsedDuration = (duration_months !== undefined && duration_months !== null && !isNaN(parseInt(duration_months))) ? parseInt(duration_months) : null;
+      const parsedStipend = (monthly_stipend !== undefined && monthly_stipend !== null && !isNaN(parseFloat(monthly_stipend))) ? parseFloat(monthly_stipend) : null;
 
       const existing = await sequelize.query(
-        `SELECT id FROM internship_evidence
+        `SELECT id, company_name, role, status FROM internship_evidence
          WHERE LOWER(roll_number) = LOWER(:canonicalRoll) 
            AND (distinct_key_normalized = :distinctKeyNorm OR distinct_key = :distinctKey)`,
         {
@@ -147,10 +157,40 @@ router.post(
       );
 
       if (existing.length > 0) {
-        return res.status(409).json({
-          success: false,
-          error: 'Duplicate submission',
-          message: `You have already submitted evidence for "${entityName}". To update, contact your mentor.`
+        const existingId = existing[0].id;
+        await sequelize.query(
+          `UPDATE internship_evidence
+           SET role = COALESCE(:finalRole, role),
+               offer_letter_url = COALESCE(:offer_letter_url, offer_letter_url),
+               completion_certificate_url = COALESCE(:completion_certificate_url, completion_certificate_url),
+               duration_months = COALESCE(:parsedDuration, duration_months),
+               monthly_stipend = COALESCE(:parsedStipend, monthly_stipend),
+               status = 'PENDING',
+               submitted_at = NOW()
+           WHERE id = :existingId`,
+          {
+            replacements: {
+              existingId,
+              finalRole: finalRole || null,
+              offer_letter_url: offer_letter_url || null,
+              completion_certificate_url: completion_certificate_url || null,
+              parsedDuration,
+              parsedStipend,
+            },
+            type: sequelize.QueryTypes.UPDATE
+          }
+        );
+
+        return res.status(200).json({
+          success: true,
+          message: `Internship record for "${entityName}" updated successfully`,
+          evidence: {
+            id: existingId,
+            company_name: entityName,
+            role: finalRole,
+            status: 'PENDING',
+            submitted_at: new Date()
+          }
         });
       }
 
@@ -159,8 +199,8 @@ router.post(
          (roll_number, distinct_key, company_name, role,
           duration_months, monthly_stipend, is_startup, offer_letter_url, completion_certificate_url,
           status, submitted_at)
-         VALUES (:canonicalRoll, :distinctKey, :entityName, :role,
-                 :duration_months, :monthly_stipend, :isStartup, :offer_letter_url, :completion_certificate_url,
+         VALUES (:canonicalRoll, :distinctKey, :entityName, :finalRole,
+                 :parsedDuration, :parsedStipend, :isStartup, :offer_letter_url, :completion_certificate_url,
                  'PENDING', NOW())
          RETURNING id, roll_number, company_name, role, is_startup, status, submitted_at`,
         {
@@ -168,9 +208,9 @@ router.post(
             canonicalRoll,
             distinctKey,
             entityName,
-            role: role || null,
-            duration_months: parseInt(duration_months) || null,
-            monthly_stipend: parseFloat(monthly_stipend) || null,
+            finalRole: finalRole || null,
+            parsedDuration,
+            parsedStipend,
             isStartup,
             offer_letter_url: offer_letter_url || null,
             completion_certificate_url: completion_certificate_url || null
@@ -230,6 +270,8 @@ router.get(
           roll_number as student_id,
           company_name,
           role,
+          role as recruitment_stage,
+          role as startup_stage,
           duration_months,
           monthly_stipend,
           is_startup,

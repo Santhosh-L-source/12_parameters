@@ -1,24 +1,51 @@
 import { useState } from 'react';
+import { API_BASE_URL } from '../services/api';
 import './DocumentViewerModal.css';
+
+export const getNormalizedDocUrl = (url) => {
+  if (!url) return '';
+  const str = String(url).trim();
+  if (
+    str.startsWith('data:') ||
+    str.startsWith('blob:') ||
+    str.startsWith('http://') ||
+    str.startsWith('https://')
+  ) {
+    return str;
+  }
+  if (str.startsWith('/')) {
+    return `${API_BASE_URL}${str}`;
+  }
+  if (str.startsWith('uploads/')) {
+    return `${API_BASE_URL}/${str}`;
+  }
+  return `${API_BASE_URL}/uploads/${str}`;
+};
 
 const DocumentViewerModal = ({ isOpen, onClose, docUrl, title = 'Document Preview' }) => {
   const [zoom, setZoom] = useState(1);
+  const [imgError, setImgError] = useState(false);
 
   if (!isOpen || !docUrl) return null;
 
-  const isPdf = docUrl.toLowerCase().includes('.pdf') || 
-                docUrl.startsWith('data:application/pdf') || 
-                docUrl.includes('type=pdf');
+  const targetUrl = getNormalizedDocUrl(docUrl);
 
-  const isImage = !isPdf && (
-    docUrl.startsWith('data:image') || 
-    docUrl.match(/\.(jpeg|jpg|gif|png|webp|svg)($|\?)/i) ||
-    docUrl.startsWith('blob:')
-  );
+  const isPdf =
+    targetUrl.toLowerCase().includes('.pdf') ||
+    targetUrl.startsWith('data:application/pdf') ||
+    targetUrl.includes('type=pdf') ||
+    targetUrl.includes('/pdf');
+
+  const isImage =
+    !isPdf &&
+    (targetUrl.startsWith('data:image') ||
+      targetUrl.match(/\.(jpeg|jpg|gif|png|webp|svg|bmp|avif)($|\?)/i) ||
+      targetUrl.startsWith('blob:') ||
+      targetUrl.includes('/uploads/'));
 
   const handleDownload = () => {
     const a = document.createElement('a');
-    a.href = docUrl;
+    a.href = targetUrl;
     a.download = isPdf ? 'certificate_document.pdf' : 'certificate_proof.png';
     document.body.appendChild(a);
     a.click();
@@ -26,10 +53,10 @@ const DocumentViewerModal = ({ isOpen, onClose, docUrl, title = 'Document Previe
   };
 
   const handleOpenNewTab = () => {
-    if (docUrl.startsWith('data:')) {
+    if (targetUrl.startsWith('data:')) {
       // Convert base64 to blob for safe new tab opening in Chrome
       try {
-        const arr = docUrl.split(',');
+        const arr = targetUrl.split(',');
         const mime = arr[0].match(/:(.*?);/)[1];
         const bstr = atob(arr[1]);
         let n = bstr.length;
@@ -45,7 +72,7 @@ const DocumentViewerModal = ({ isOpen, onClose, docUrl, title = 'Document Previe
         console.warn('Blob conversion error:', e);
       }
     }
-    window.open(docUrl, '_blank', 'noopener,noreferrer');
+    window.open(targetUrl, '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -66,19 +93,19 @@ const DocumentViewerModal = ({ isOpen, onClose, docUrl, title = 'Document Previe
           <div className="doc-modal-actions">
             {!isPdf && isImage && (
               <div className="zoom-controls">
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   className="doc-action-btn"
-                  onClick={() => setZoom(z => Math.max(0.5, z - 0.25))}
+                  onClick={() => setZoom((z) => Math.max(0.5, z - 0.25))}
                   title="Zoom Out"
                 >
                   🔍-
                 </button>
                 <span className="zoom-level">{Math.round(zoom * 100)}%</span>
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   className="doc-action-btn"
-                  onClick={() => setZoom(z => Math.min(3, z + 0.25))}
+                  onClick={() => setZoom((z) => Math.min(3, z + 0.25))}
                   title="Zoom In"
                 >
                   🔍+
@@ -86,8 +113,8 @@ const DocumentViewerModal = ({ isOpen, onClose, docUrl, title = 'Document Previe
               </div>
             )}
 
-            <button 
-              type="button" 
+            <button
+              type="button"
               className="doc-action-btn"
               onClick={handleOpenNewTab}
               title="Open in New Tab"
@@ -95,8 +122,8 @@ const DocumentViewerModal = ({ isOpen, onClose, docUrl, title = 'Document Previe
               ↗ Open
             </button>
 
-            <button 
-              type="button" 
+            <button
+              type="button"
               className="doc-action-btn primary"
               onClick={handleDownload}
               title="Download File"
@@ -104,8 +131,8 @@ const DocumentViewerModal = ({ isOpen, onClose, docUrl, title = 'Document Previe
               ⬇ Download
             </button>
 
-            <button 
-              type="button" 
+            <button
+              type="button"
               className="doc-modal-close"
               onClick={onClose}
               title="Close Preview"
@@ -120,25 +147,26 @@ const DocumentViewerModal = ({ isOpen, onClose, docUrl, title = 'Document Previe
           {isPdf ? (
             <div className="pdf-frame-wrapper">
               <iframe
-                src={docUrl}
+                src={targetUrl}
                 title="PDF Document Preview"
                 className="pdf-iframe"
                 frameBorder="0"
               />
             </div>
-          ) : isImage ? (
+          ) : isImage && !imgError ? (
             <div className="image-preview-wrapper">
-              <img 
-                src={docUrl} 
-                alt="Document Preview" 
+              <img
+                src={targetUrl}
+                alt="Document Preview"
                 className="preview-img"
                 style={{ transform: `scale(${zoom})` }}
+                onError={() => setImgError(true)}
               />
             </div>
           ) : (
             <div className="generic-doc-preview">
               <iframe
-                src={docUrl}
+                src={targetUrl}
                 title="Document Preview"
                 className="pdf-iframe"
                 frameBorder="0"
@@ -152,3 +180,4 @@ const DocumentViewerModal = ({ isOpen, onClose, docUrl, title = 'Document Previe
 };
 
 export default DocumentViewerModal;
+

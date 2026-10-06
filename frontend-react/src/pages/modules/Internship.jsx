@@ -243,7 +243,7 @@ const Internship = () => {
                   return (
                     <tr key={item.id}>
                       <td><strong>{item.company_name || item.startup_name}</strong></td>
-                      <td>{(item.recruitment_stage || item.startup_stage || '-').replace(/_/g, ' ')}</td>
+                      <td>{(item.recruitment_stage || item.startup_stage || item.role || '-').replace(/_/g, ' ')}</td>
                       <td>
                         {proof ? (
                           <button
