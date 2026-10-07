@@ -14,14 +14,29 @@ const apiRequest = async (endpoint, options = {}) => {
     ...options.headers,
   };
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    ...options,
-    headers,
-  });
+  try {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      ...options,
+      headers,
+    });
 
-  const data = await response.json();
-  return data;
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const data = await response.json();
+      return data;
+    }
+
+    const text = await response.text();
+    if (!response.ok) {
+      return { success: false, error: `HTTP ${response.status}`, message: text || `Request failed (${response.status})` };
+    }
+    return { success: true, message: text };
+  } catch (err) {
+    console.warn(`[API] Error querying ${endpoint}:`, err.message);
+    return { success: false, error: 'NetworkError', message: err.message || 'Network request failed' };
+  }
 };
+
 
 // File Upload API (PDF & JPG/JPEG/PNG)
 export const uploadAPI = {

@@ -497,6 +497,12 @@ router.get(
         events_count: result ? result.length : 0
       });
     } catch (err) {
+      console.error('[COMPETITION] Calculate marks error:', err.message);
+      next(err);
+    }
+  }
+);
+
 /**
  * DELETE /api/competition/evidence/:id
  * Remove competition evidence
@@ -561,4 +567,5 @@ router.delete(
 );
 
 module.exports = router;
+
 
