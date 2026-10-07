@@ -3,11 +3,12 @@ import Header from '../../components/Header';
 import FileUpload from '../../components/FileUpload';
 import DocumentViewerModal from '../../components/DocumentViewerModal';
 import { moduleAPI } from '../../services/api';
-import { getStudent } from '../../utils/auth';
+import { getStudent, getStudentRollNumber } from '../../utils/auth';
 import './Competition.css';
 
 const Internship = () => {
   const student = getStudent();
+  const rollNumber = getStudentRollNumber();
 
   const [formData, setFormData] = useState({
     track: 'RECRUITMENT',
@@ -28,8 +29,10 @@ const Internship = () => {
   const [previewDoc, setPreviewDoc] = useState(null);
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (rollNumber) {
+      loadData();
+    }
+  }, [rollNumber]);
 
   const showAlert = (message, type = 'success') => {
     setAlert({ message, type });
@@ -38,9 +41,10 @@ const Internship = () => {
 
   const loadData = async () => {
     try {
+      if (!rollNumber) return;
       const [evidenceRes, marksRes] = await Promise.all([
-        moduleAPI.getInternshipEvidence(student.roll_number),
-        moduleAPI.getInternshipMarks(student.roll_number),
+        moduleAPI.getInternshipEvidence(rollNumber),
+        moduleAPI.getInternshipMarks(rollNumber),
       ]);
 
       const list = evidenceRes?.evidence || [];
@@ -54,6 +58,7 @@ const Internship = () => {
       console.error('Error loading internship data:', error);
     }
   };
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();

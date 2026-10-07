@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import Header from '../../components/Header';
 import FileUpload from '../../components/FileUpload';
 import { moduleAPI } from '../../services/api';
-import { getStudent } from '../../utils/auth';
+import { getStudent, getStudentRollNumber } from '../../utils/auth';
 import './Competition.css';
 
 const STAGE_OPTIONS = {
@@ -27,6 +27,7 @@ const STAGE_OPTIONS = {
 
 const ProjectPubPatent = () => {
   const student = getStudent();
+  const rollNumber = getStudentRollNumber();
 
   const [formData, setFormData] = useState({
     semester: 1,
@@ -48,8 +49,10 @@ const ProjectPubPatent = () => {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (rollNumber) {
+      loadData();
+    }
+  }, [rollNumber]);
 
   const showAlert = (message, type = 'success') => {
     setAlert({ message, type });
@@ -77,9 +80,10 @@ const ProjectPubPatent = () => {
 
   const loadData = async () => {
     try {
+      if (!rollNumber) return;
       const [evidenceRes, marksRes] = await Promise.all([
-        moduleAPI.getProjectPubPatentEvidence(student.roll_number),
-        moduleAPI.getProjectPubPatentMarks(student.roll_number),
+        moduleAPI.getProjectPubPatentEvidence(rollNumber),
+        moduleAPI.getProjectPubPatentMarks(rollNumber),
       ]);
 
       const list = evidenceRes?.evidence || [];
@@ -93,6 +97,7 @@ const ProjectPubPatent = () => {
       console.error('Error loading Project/Publication/Patent data:', error);
     }
   };
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();

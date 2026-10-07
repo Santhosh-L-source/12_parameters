@@ -5,13 +5,28 @@ export const isAuthenticated = () => {
 };
 
 export const getStudent = () => {
-  const student = localStorage.getItem('student') || localStorage.getItem('user');
-  return student ? JSON.parse(student) : null;
+  try {
+    const student = localStorage.getItem('student') || localStorage.getItem('user');
+    return student ? JSON.parse(student) : null;
+  } catch (e) {
+    console.warn('Failed to parse student data from localStorage:', e);
+    return null;
+  }
+};
+
+export const getStudentRollNumber = () => {
+  const student = getStudent();
+  return student?.roll_number || student?.id_number || student?.id || student?.username || '';
 };
 
 export const getUser = () => {
-  const user = localStorage.getItem('user') || localStorage.getItem('student');
-  return user ? JSON.parse(user) : null;
+  try {
+    const user = localStorage.getItem('user') || localStorage.getItem('student');
+    return user ? JSON.parse(user) : null;
+  } catch (e) {
+    console.warn('Failed to parse user data from localStorage:', e);
+    return null;
+  }
 };
 
 export const getUserRole = () => {
@@ -30,3 +45,4 @@ export const clearAuth = () => {
   localStorage.removeItem('student');
   localStorage.removeItem('user');
 };
+

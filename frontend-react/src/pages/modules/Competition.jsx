@@ -4,12 +4,13 @@ import Header from '../../components/Header';
 import FileUpload from '../../components/FileUpload';
 import DocumentViewerModal from '../../components/DocumentViewerModal';
 import { moduleAPI } from '../../services/api';
-import { getStudent } from '../../utils/auth';
+import { getStudent, getStudentRollNumber } from '../../utils/auth';
 import './Competition.css';
 
 const Competition = () => {
   const navigate = useNavigate();
   const student = getStudent();
+  const rollNumber = getStudentRollNumber();
 
   const [formData, setFormData] = useState({
     eventName: '',
@@ -33,9 +34,11 @@ const Competition = () => {
   const [previewDoc, setPreviewDoc] = useState(null);
 
   useEffect(() => {
-    loadEvidence();
-    loadStats();
-  }, []);
+    if (rollNumber) {
+      loadEvidence();
+      loadStats();
+    }
+  }, [rollNumber]);
 
   const showAlert = (message, type = 'success') => {
     setAlert({ message, type });
@@ -80,8 +83,9 @@ const Competition = () => {
 
   const loadEvidence = async () => {
     try {
-      const data = await moduleAPI.getCompetitionEvidence(student.roll_number);
-      if (data.evidence) {
+      if (!rollNumber) return;
+      const data = await moduleAPI.getCompetitionEvidence(rollNumber);
+      if (data?.evidence) {
         setEvidence(data.evidence);
       }
     } catch (error) {
@@ -91,7 +95,8 @@ const Competition = () => {
 
   const loadStats = async () => {
     try {
-      const data = await moduleAPI.getCompetitionMarks(student.roll_number);
+      if (!rollNumber) return;
+      const data = await moduleAPI.getCompetitionMarks(rollNumber);
       if (data) {
         setStats({
           totalEvents: data.total_events || 0,
@@ -104,6 +109,7 @@ const Competition = () => {
       console.error('Error loading stats:', error);
     }
   };
+
 
   return (
     <div className="competition-page">

@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react';
 import Header from '../../components/Header';
 import FileUpload from '../../components/FileUpload';
 import { moduleAPI } from '../../services/api';
-import { getStudent } from '../../utils/auth';
+import { getStudent, getStudentRollNumber } from '../../utils/auth';
 import './Competition.css';
 
 const Aptitude = () => {
   const student = getStudent();
+  const rollNumber = getStudentRollNumber();
 
   const [formData, setFormData] = useState({
     eventType: 'APTITUDE',
@@ -27,8 +28,10 @@ const Aptitude = () => {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (rollNumber) {
+      loadData();
+    }
+  }, [rollNumber]);
 
   const showAlert = (message, type = 'success') => {
     setAlert({ message, type });
@@ -37,9 +40,10 @@ const Aptitude = () => {
 
   const loadData = async () => {
     try {
+      if (!rollNumber) return;
       const [evidenceRes, marksRes] = await Promise.all([
-        moduleAPI.getAptitudeEvidence(student.roll_number),
-        moduleAPI.getAptitudeMarks(student.roll_number),
+        moduleAPI.getAptitudeEvidence(rollNumber),
+        moduleAPI.getAptitudeMarks(rollNumber),
       ]);
 
       const list = evidenceRes?.evidence || [];
@@ -54,6 +58,7 @@ const Aptitude = () => {
       console.error('Error loading aptitude data:', error);
     }
   };
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();

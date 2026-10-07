@@ -3,11 +3,12 @@ import Header from '../../components/Header';
 import FileUpload from '../../components/FileUpload';
 import DocumentViewerModal from '../../components/DocumentViewerModal';
 import { moduleAPI } from '../../services/api';
-import { getStudent } from '../../utils/auth';
+import { getStudent, getStudentRollNumber } from '../../utils/auth';
 import './Competition.css';
 
 const Certificate = () => {
   const student = getStudent();
+  const rollNumber = getStudentRollNumber();
 
   const [formData, setFormData] = useState({
     credentialName: '',
@@ -30,8 +31,10 @@ const Certificate = () => {
   const [previewDoc, setPreviewDoc] = useState(null);
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (rollNumber) {
+      loadData();
+    }
+  }, [rollNumber]);
 
   const showAlert = (message, type = 'success') => {
     setAlert({ message, type });
@@ -40,9 +43,10 @@ const Certificate = () => {
 
   const loadData = async () => {
     try {
+      if (!rollNumber) return;
       const [evidenceRes, marksRes] = await Promise.all([
-        moduleAPI.getCertificateEvidence(student.roll_number),
-        moduleAPI.getCertificateMarks(student.roll_number),
+        moduleAPI.getCertificateEvidence(rollNumber),
+        moduleAPI.getCertificateMarks(rollNumber),
       ]);
 
       const list = evidenceRes?.evidence || [];
@@ -57,6 +61,7 @@ const Certificate = () => {
       console.error('Error loading certificate data:', error);
     }
   };
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();

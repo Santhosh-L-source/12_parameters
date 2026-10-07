@@ -3,11 +3,12 @@ import Header from '../../components/Header';
 import FileUpload from '../../components/FileUpload';
 import DocumentViewerModal from '../../components/DocumentViewerModal';
 import { moduleAPI } from '../../services/api';
-import { getStudent } from '../../utils/auth';
+import { getStudent, getStudentRollNumber } from '../../utils/auth';
 import './Competition.css';
 
 const Gate = () => {
   const student = getStudent();
+  const rollNumber = getStudentRollNumber();
 
   const [formData, setFormData] = useState({
     examType: 'GATE',
@@ -36,8 +37,10 @@ const Gate = () => {
   const [previewDoc, setPreviewDoc] = useState(null);
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (rollNumber) {
+      loadData();
+    }
+  }, [rollNumber]);
 
   const showAlert = (message, type = 'success') => {
     setAlert({ message, type });
@@ -46,9 +49,10 @@ const Gate = () => {
 
   const loadData = async () => {
     try {
+      if (!rollNumber) return;
       const [evidenceRes, marksRes] = await Promise.all([
-        moduleAPI.getGateEvidence(student.roll_number),
-        moduleAPI.getGateMarks(student.roll_number),
+        moduleAPI.getGateEvidence(rollNumber),
+        moduleAPI.getGateMarks(rollNumber),
       ]);
 
       const list = evidenceRes?.evidence || [];
@@ -63,6 +67,7 @@ const Gate = () => {
       console.error('Error loading GATE data:', error);
     }
   };
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
