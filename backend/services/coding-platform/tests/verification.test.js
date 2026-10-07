@@ -63,11 +63,13 @@ describe('Platform Verification Support', () => {
     expect(typeof strategy.check).toBe('function');
   });
 
-  test('unsupported platforms are marked correctly', () => {
+  test('all major platforms are now supported', () => {
     for (const platform of ['HACKERRANK', 'ATCODER', 'CODECHEF', 'GEEKSFORGEEKS', 'SKILLRACK']) {
-      expect(isVerificationSupported(platform)).toBe(false);
+      expect(isVerificationSupported(platform)).toBe(true);
       const strategy = getVerificationStrategy(platform);
-      expect(strategy.reason).toBeTruthy();
+      expect(strategy.fieldName).toBeTruthy();
+      expect(strategy.instructions).toBeTruthy();
+      expect(typeof strategy.check).toBe('function');
     }
   });
 
