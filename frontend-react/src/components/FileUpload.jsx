@@ -98,25 +98,23 @@ const FileUpload = ({
         setPreviewUrl(clientDataUri);
       }
 
-      // Upload to server
-      let chosenUrl = clientDataUri;
+      // Try background upload to server for logging/backup, but always store durable clientDataUri
       try {
-        const res = await uploadAPI.uploadFile(file);
-        if (res && res.success && res.localUrl) {
-          chosenUrl = res.localUrl;
-        }
+        await uploadAPI.uploadFile(file);
       } catch (uploadErr) {
-        console.warn('Server upload fallback to clientDataUri:', uploadErr.message);
+        console.warn('Background server upload note:', uploadErr.message);
       }
+
+      const durableUrl = clientDataUri;
 
       setFileInfo({
         name: file.name,
         size: (file.size / (1024 * 1024)).toFixed(2) + ' MB',
         type: file.type.includes('pdf') ? 'pdf' : 'image',
-        url: chosenUrl,
+        url: durableUrl,
       });
-      setPreviewUrl(clientDataUri || chosenUrl);
-      onChange(chosenUrl);
+      setPreviewUrl(durableUrl);
+      onChange(durableUrl);
     } catch (err) {
       console.warn('File processing warning:', err.message);
       setError('Failed to process document. Please try again.');

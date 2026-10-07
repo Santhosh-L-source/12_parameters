@@ -232,6 +232,14 @@ const DocumentViewerModal = ({ isOpen, onClose, docUrl, title = 'Document Previe
                 onError={() => setImgError(true)}
               />
             </div>
+          ) : imgError ? (
+            <div style={{ padding: '3rem', textAlign: 'center', background: '#ffffff', width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>⚠️</div>
+              <h3 style={{ fontSize: '1.2rem', color: '#1e293b', marginBottom: '0.5rem' }}>Document Preview Unavailable</h3>
+              <p style={{ color: '#64748b', maxWidth: '440px', marginBottom: '1.5rem', fontSize: '0.875rem' }}>
+                This previously submitted file reference is not available on temporary storage. Please submit your certificate proof again to attach the permanent document.
+              </p>
+            </div>
           ) : (
             <div className="generic-doc-preview">
               <iframe
