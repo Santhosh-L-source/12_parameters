@@ -5,7 +5,9 @@
 [![Vite](https://img.shields.io/badge/Vite-5.0+-646CFF?style=for-the-badge&logo=vite&logoColor=white)](https://vitejs.dev/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Supabase-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://supabase.com/)
 [![Express.js](https://img.shields.io/badge/Express.js-4.18-000000?style=for-the-badge&logo=express&logoColor=white)](https://expressjs.com/)
-[![Vercel](https://img.shields.io/badge/Deployment-Vercel-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://vercel.com/)
+[![AWS](https://img.shields.io/badge/Deployment-AWS%20EC2%20%2F%20S3-FF9900?style=for-the-badge&logo=amazon-aws&logoColor=white)](https://aws.amazon.com/)
+[![Terraform](https://img.shields.io/badge/IaC-Terraform-7B42BC?style=for-the-badge&logo=terraform&logoColor=white)](https://www.terraform.io/)
+
 
 ---
 
@@ -359,26 +361,29 @@ node src/config/seedYearMentors.js
 
 ---
 
-## 🚀 Production Deployment Architecture
+## 🚀 Production Deployment Architecture (AWS EC2 & S3)
 
-The application is deployed on **Vercel** with a decoupled frontend and serverless API architecture:
+The application is architected for production deployment on **Amazon Web Services (AWS)** using **Terraform Infrastructure as Code (IaC)**:
 
-- **Frontend Deployment**: Built using Vite (`dist/`) and served globally via Vercel Edge CDN.
-- **Backend Deployment**: Handled as an Express serverless function via `api/index.js` configured in `vercel.json`:
+### 1. Compute & Proxy Layer (AWS EC2 + Nginx)
+- **Node.js Services**: Managed via PM2 ecosystem (`deploy/pm2-ecosystem.config.js`) for zero-downtime restarts.
+- **Nginx Reverse Proxy**: Configured at `/etc/nginx/sites-available/hope-project` (`deploy/nginx-config.conf`) to handle SSL termination, client max upload size (25MB), and reverse proxy to `http://localhost:3005`.
+- **Database**: Connects directly over SSL to Supabase Cloud PostgreSQL.
 
-```json
-{
-  "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/index.js" },
-    { "source": "/uploads/(.*)", "destination": "/api/index.js" },
-    { "source": "/(.*)", "destination": "/index.html" }
-  ]
-}
+### 2. Frontend Hosting Options
+- **Option A (All-in-One on EC2)**: Built via Vite (`npm run build`) and served statically by Nginx on the EC2 instance.
+- **Option B (Decoupled S3 + CloudFront)**: Deployed to AWS S3 bucket with CloudFront CDN distribution via `deploy/deploy-frontend-s3.sh`.
+
+### 3. Deploying with Terraform:
+```bash
+cd terraform
+cp terraform.tfvars.example terraform.tfvars
+# Fill in your AWS & Supabase values in terraform.tfvars
+terraform init
+terraform plan
+terraform apply
 ```
 
-### Live Production Endpoints:
-- **Web Application**: `https://12-parameters.vercel.app`
-- **Backend API**: `https://hope-backend-psi.vercel.app`
 
 ---
 
