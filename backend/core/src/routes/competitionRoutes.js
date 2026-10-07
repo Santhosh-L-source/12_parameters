@@ -497,10 +497,68 @@ router.get(
         events_count: result ? result.length : 0
       });
     } catch (err) {
-      console.error('[COMPETITION] Calculate marks error:', err.message);
+/**
+ * DELETE /api/competition/evidence/:id
+ * Remove competition evidence
+ */
+router.delete(
+  ['/evidence/:id', '/:id'],
+  authenticate,
+  [param('id').notEmpty().withMessage('id is required')],
+  validate,
+  async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      const userRoll = req.user.roll_number || req.user.id_number || req.user.username;
+      const userRole = req.user.role;
+
+      const rows = await sequelize.query(
+        `SELECT id, roll_number FROM competition_evidence WHERE id = :id LIMIT 1`,
+        {
+          replacements: { id },
+          type: sequelize.QueryTypes.SELECT
+        }
+      );
+
+      if (!rows || rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: 'Not Found',
+          message: 'Evidence record not found'
+        });
+      }
+
+      const evidence = rows[0];
+      const canonicalReqRoll = await resolveStudentRoll(userRoll);
+
+      if (userRole !== 'admin' && userRole !== 'mentor' && evidence.roll_number.toLowerCase() !== String(userRoll).toLowerCase() && evidence.roll_number.toLowerCase() !== String(canonicalReqRoll).toLowerCase()) {
+        return res.status(403).json({
+          success: false,
+          error: 'Forbidden',
+          message: 'You can only remove your own submitted evidence'
+        });
+      }
+
+      await sequelize.query(
+        `DELETE FROM competition_evidence WHERE id = :id`,
+        {
+          replacements: { id },
+          type: sequelize.QueryTypes.DELETE
+        }
+      );
+
+      await updateStudentProfileScore(evidence.roll_number);
+
+      res.json({
+        success: true,
+        message: 'Evidence removed successfully'
+      });
+    } catch (err) {
+      console.error('[COMPETITION] Delete evidence error:', err.message);
       next(err);
     }
   }
 );
 
 module.exports = router;
+

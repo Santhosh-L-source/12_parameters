@@ -31,6 +31,7 @@ const Competition = () => {
   const [evidence, setEvidence] = useState([]);
   const [alert, setAlert] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
   const [previewDoc, setPreviewDoc] = useState(null);
 
   useEffect(() => {
@@ -44,6 +45,28 @@ const Competition = () => {
     setAlert({ message, type });
     setTimeout(() => setAlert(null), 5000);
   };
+
+  const handleDelete = async (id, name) => {
+    if (!window.confirm(`Are you sure you want to remove the record for "${name}"?`)) {
+      return;
+    }
+    setDeletingId(id);
+    try {
+      const res = await moduleAPI.deleteCompetitionEvidence(id);
+      if (res?.success) {
+        showAlert('Evidence record removed successfully', 'success');
+        loadEvidence();
+        loadStats();
+      } else {
+        showAlert(res?.message || 'Failed to remove evidence', 'error');
+      }
+    } catch (err) {
+      showAlert('Error removing evidence. Please try again.', 'error');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -273,12 +296,13 @@ const Competition = () => {
                   <th>PROOF</th>
                   <th>STATUS</th>
                   <th>SUBMITTED</th>
+                  <th style={{ textAlign: 'center' }}>ACTION</th>
                 </tr>
               </thead>
               <tbody>
                 {evidence.length === 0 ? (
                   <tr>
-                    <td colSpan="6" style={{ textAlign: 'center', color: '#6b7280', padding: '40px' }}>
+                    <td colSpan="7" style={{ textAlign: 'center', color: '#6b7280', padding: '40px' }}>
                       No evidence submitted yet
                     </td>
                   </tr>
@@ -321,10 +345,33 @@ const Competition = () => {
                         </span>
                       </td>
                       <td>{new Date(e.submitted_at).toLocaleDateString()}</td>
+                      <td style={{ textAlign: 'center' }}>
+                        <button
+                          type="button"
+                          className="remove-btn-sm"
+                          style={{
+                            padding: '0.35rem 0.65rem',
+                            background: '#fee2e2',
+                            color: '#dc2626',
+                            border: '1px solid #fecaca',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontWeight: 600,
+                            fontSize: '0.8rem',
+                            transition: 'all 0.15s ease'
+                          }}
+                          onClick={() => handleDelete(e.id, e.event_name)}
+                          disabled={deletingId === e.id}
+                          title="Delete this evidence submission"
+                        >
+                          {deletingId === e.id ? 'Removing...' : '🗑️ Remove'}
+                        </button>
+                      </td>
                     </tr>
                   ))
                 )}
               </tbody>
+
             </table>
           </div>
         </div>

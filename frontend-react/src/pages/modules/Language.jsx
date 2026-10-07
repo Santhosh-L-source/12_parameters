@@ -26,6 +26,7 @@ const Language = () => {
   const [evidenceList, setEvidenceList] = useState([]);
   const [alert, setAlert] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
   const [previewDoc, setPreviewDoc] = useState(null);
 
   useEffect(() => {
@@ -38,6 +39,27 @@ const Language = () => {
     setAlert({ message, type });
     setTimeout(() => setAlert(null), 5000);
   };
+
+  const handleDelete = async (id, name) => {
+    if (!window.confirm(`Are you sure you want to remove the language certification for "${name}"?`)) {
+      return;
+    }
+    setDeletingId(id);
+    try {
+      const res = await moduleAPI.deleteLanguageEvidence(id);
+      if (res?.success) {
+        showAlert('Language certification removed successfully', 'success');
+        loadData();
+      } else {
+        showAlert(res?.message || 'Failed to remove certification', 'error');
+      }
+    } catch (err) {
+      showAlert('Error removing certification. Please try again.', 'error');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
 
   const loadData = async () => {
     try {
@@ -216,6 +238,7 @@ const Language = () => {
                   <th>Proof / Document</th>
                   <th>Status</th>
                   <th>Marks</th>
+                  <th style={{ textAlign: 'center' }}>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -253,10 +276,33 @@ const Language = () => {
                       </span>
                     </td>
                     <td>{item.status === 'VERIFIED' ? (item.proficiency_level === 'B1' ? 15 : item.proficiency_level === 'A2' ? 12 : 7) : '-'}</td>
+                    <td style={{ textAlign: 'center' }}>
+                      <button
+                        type="button"
+                        className="remove-btn-sm"
+                        style={{
+                          padding: '0.35rem 0.65rem',
+                          background: '#fee2e2',
+                          color: '#dc2626',
+                          border: '1px solid #fecaca',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontWeight: 600,
+                          fontSize: '0.8rem',
+                          transition: 'all 0.15s ease'
+                        }}
+                        onClick={() => handleDelete(item.id, `${item.language} (${item.proficiency_level})`)}
+                        disabled={deletingId === item.id}
+                        title="Remove this language certification"
+                      >
+                        {deletingId === item.id ? 'Removing...' : '🗑️ Remove'}
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+
           )}
         </div>
 

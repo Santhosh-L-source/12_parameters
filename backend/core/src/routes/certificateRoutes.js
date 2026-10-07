@@ -522,4 +522,68 @@ router.get(
   }
 );
 
+/**
+ * DELETE /api/certificate/evidence/:id
+ * Remove certificate evidence
+ */
+router.delete(
+  ['/evidence/:id', '/:id'],
+  authenticate,
+  [param('id').notEmpty().withMessage('id is required')],
+  validate,
+  async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      const userRoll = req.user.roll_number || req.user.id_number || req.user.username;
+      const userRole = req.user.role;
+
+      const rows = await sequelize.query(
+        `SELECT id, roll_number FROM certificate_evidence WHERE id = :id LIMIT 1`,
+        {
+          replacements: { id },
+          type: sequelize.QueryTypes.SELECT
+        }
+      );
+
+      if (!rows || rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: 'Not Found',
+          message: 'Certificate record not found'
+        });
+      }
+
+      const evidence = rows[0];
+      const canonicalReqRoll = await resolveStudentRoll(userRoll);
+
+      if (userRole !== 'admin' && userRole !== 'mentor' && evidence.roll_number.toLowerCase() !== String(userRoll).toLowerCase() && evidence.roll_number.toLowerCase() !== String(canonicalReqRoll).toLowerCase()) {
+        return res.status(403).json({
+          success: false,
+          error: 'Forbidden',
+          message: 'You can only remove your own submitted certificates'
+        });
+      }
+
+      await sequelize.query(
+        `DELETE FROM certificate_evidence WHERE id = :id`,
+        {
+          replacements: { id },
+          type: sequelize.QueryTypes.DELETE
+        }
+      );
+
+      await updateStudentProfileScore(evidence.roll_number);
+
+      res.json({
+        success: true,
+        message: 'Certificate removed successfully'
+      });
+    } catch (err) {
+      console.error('[CERTIFICATE] Delete evidence error:', err.message);
+      next(err);
+    }
+  }
+);
+
 module.exports = router;
+

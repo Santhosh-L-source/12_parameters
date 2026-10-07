@@ -81,6 +81,9 @@ export const moduleAPI = {
     method: 'POST',
     body: JSON.stringify(data),
   }),
+  deleteLanguageEvidence: (id) => apiRequest(`/api/language/evidence/${id}`, {
+    method: 'DELETE',
+  }),
 
   // GATE
   getGateEvidence: (studentId) => apiRequest(`/api/gate/student/${studentId}`),
@@ -89,13 +92,20 @@ export const moduleAPI = {
     method: 'POST',
     body: JSON.stringify(data),
   }),
+  deleteGateEvidence: (id) => apiRequest(`/api/gate/evidence/${id}`, {
+    method: 'DELETE',
+  }),
 
   // Competition
   getCompetitionEvidence: (studentId) => apiRequest(`/api/competition/student/${studentId}`),
   getCompetitionMarks: (studentId) => apiRequest(`/api/competition/marks/${studentId}`),
+
   submitCompetition: (data) => apiRequest('/api/competition/submit', {
     method: 'POST',
     body: JSON.stringify(data),
+  }),
+  deleteCompetitionEvidence: (id) => apiRequest(`/api/competition/evidence/${id}`, {
+    method: 'DELETE',
   }),
 
   // Internship
@@ -105,6 +115,9 @@ export const moduleAPI = {
     method: 'POST',
     body: JSON.stringify(data),
   }),
+  deleteInternshipEvidence: (id) => apiRequest(`/api/internship/evidence/${id}`, {
+    method: 'DELETE',
+  }),
 
   // Certificate
   getCertificateEvidence: (studentId) => apiRequest(`/api/certificate/student/${studentId}`),
@@ -112,6 +125,9 @@ export const moduleAPI = {
   submitCertificate: (data) => apiRequest('/api/certificate/submit', {
     method: 'POST',
     body: JSON.stringify(data),
+  }),
+  deleteCertificateEvidence: (id) => apiRequest(`/api/certificate/evidence/${id}`, {
+    method: 'DELETE',
   }),
 
   // Aptitude & Communication
@@ -121,6 +137,10 @@ export const moduleAPI = {
     method: 'POST',
     body: JSON.stringify(data),
   }),
+  deleteAptitudeEvidence: (id) => apiRequest(`/api/aptitude-communication/evidence/${id}`, {
+    method: 'DELETE',
+  }),
+
 
   // Coding Problems
   getCodingProblemsEvidence: (studentId) => apiRequest(`/api/coding-problems/student/${studentId}`),
@@ -182,6 +202,10 @@ export const moduleAPI = {
     method: 'POST',
     body: JSON.stringify(data),
   }),
+  deleteProjectPubPatentEvidence: (id) => apiRequest(`/api/project-pub-patent/evidence/${id}`, {
+    method: 'DELETE',
+  }),
+
 };
 
 // Mentor Verification APIs

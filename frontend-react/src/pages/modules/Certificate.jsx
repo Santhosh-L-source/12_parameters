@@ -28,6 +28,7 @@ const Certificate = () => {
   const [evidenceList, setEvidenceList] = useState([]);
   const [alert, setAlert] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
   const [previewDoc, setPreviewDoc] = useState(null);
 
   useEffect(() => {
@@ -40,6 +41,27 @@ const Certificate = () => {
     setAlert({ message, type });
     setTimeout(() => setAlert(null), 5000);
   };
+
+  const handleDelete = async (id, name) => {
+    if (!window.confirm(`Are you sure you want to remove the certificate "${name}"?`)) {
+      return;
+    }
+    setDeletingId(id);
+    try {
+      const res = await moduleAPI.deleteCertificateEvidence(id);
+      if (res?.success) {
+        showAlert('Certificate removed successfully', 'success');
+        loadData();
+      } else {
+        showAlert(res?.message || 'Failed to remove certificate', 'error');
+      }
+    } catch (err) {
+      showAlert('Error removing certificate. Please try again.', 'error');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
 
   const loadData = async () => {
     try {
@@ -250,6 +272,7 @@ const Certificate = () => {
                   <th>Tier</th>
                   <th>Proof / Document</th>
                   <th>Status</th>
+                  <th style={{ textAlign: 'center' }}>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -286,10 +309,33 @@ const Certificate = () => {
                         {item.status || 'PENDING'}
                       </span>
                     </td>
+                    <td style={{ textAlign: 'center' }}>
+                      <button
+                        type="button"
+                        className="remove-btn-sm"
+                        style={{
+                          padding: '0.35rem 0.65rem',
+                          background: '#fee2e2',
+                          color: '#dc2626',
+                          border: '1px solid #fecaca',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontWeight: 600,
+                          fontSize: '0.8rem',
+                          transition: 'all 0.15s ease'
+                        }}
+                        onClick={() => handleDelete(item.id, item.credential_name)}
+                        disabled={deletingId === item.id}
+                        title="Remove this certificate"
+                      >
+                        {deletingId === item.id ? 'Removing...' : '🗑️ Remove'}
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+
           )}
         </div>
 
