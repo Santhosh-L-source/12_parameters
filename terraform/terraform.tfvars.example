@@ -1,0 +1,31 @@
+# HOPE Project - Terraform Variables
+# Copy this file to terraform.tfvars and fill in your actual values
+# WARNING: Never commit terraform.tfvars to Git (it contains secrets)
+
+# AWS Configuration
+aws_region  = "ap-south-1" # Mumbai (change to us-east-1 for N. Virginia, etc.)
+environment = "production"
+
+# EC2 Configuration
+instance_type     = "t3.medium" # Options: t3.small, t3.medium, t3.large
+root_volume_size  = 20          # GB
+
+# SSH Configuration
+public_key_path = "~/.ssh/id_rsa.pub"
+ssh_allowed_ips = ["0.0.0.0/0"] # CHANGE THIS! Use ["YOUR_IP/32"] for security
+
+# GitHub Repository (already set, no change needed)
+github_repo = "https://github.com/Santhosh-L-source/12_parameters.git"
+
+# Supabase Database Configuration
+# Get these from: https://app.supabase.com/project/_/settings/database
+db_host     = "aws-0-ap-south-1.pooler.supabase.com"
+db_name     = "postgres"
+db_user     = "your_supabase_user"        # CHANGE THIS
+db_password = "your_supabase_password"    # CHANGE THIS
+
+# JWT Secret (generate with: openssl rand -base64 48)
+jwt_secret = "your_generated_jwt_secret_min_32_chars" # CHANGE THIS
+
+# Frontend Deployment
+deploy_frontend = true # true = deploy on EC2, false = deploy separately to S3
