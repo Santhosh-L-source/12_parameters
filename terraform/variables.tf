@@ -82,11 +82,23 @@ variable "jwt_secret" {
   # Generate with: openssl rand -base64 48
 }
 
-# Frontend Deployment
+# Frontend Deployment Options
 variable "deploy_frontend" {
-  description = "Deploy frontend on EC2 (true) or separately on S3 (false)"
+  description = "Deploy frontend on EC2 along with backend"
   type        = bool
-  default     = true
+  default     = false # Set to false if using S3/CloudFront instead
+}
+
+variable "deploy_frontend_to_s3" {
+  description = "Deploy frontend to S3 + CloudFront (recommended for production)"
+  type        = bool
+  default     = false
+}
+
+variable "s3_bucket_name" {
+  description = "S3 bucket name for frontend (leave empty for auto-generated name)"
+  type        = string
+  default     = ""
 }
 
 # Tags

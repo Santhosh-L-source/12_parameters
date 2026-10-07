@@ -29,3 +29,4 @@ jwt_secret = "your_generated_jwt_secret_min_32_chars" # CHANGE THIS
 
 # Frontend Deployment
 deploy_frontend = true # true = deploy on EC2, false = deploy separately to S3
+

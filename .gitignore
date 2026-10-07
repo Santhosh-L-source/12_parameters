@@ -42,3 +42,26 @@ desktop.ini
 backend/core/uploads/*
 !backend/core/uploads/.gitkeep
 backend/core/scratch/
+
+# Test coverage
+coverage/
+*/coverage/
+*/*/coverage/
+
+# Terraform
+*.tfvars
+!*.tfvars.example
+.terraform/
+.terraform.lock.hcl
+terraform.tfstate
+terraform.tfstate.*
+
+# Scratch & test scripts
+check-*.js
+reset-*.js
+cleanup-*.js
+test-*.js
+show-*.js
+verify-*.js
+complete-reset.js
+
